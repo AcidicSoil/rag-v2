@@ -1,0 +1,21 @@
+{
+  "name": "lms-plugin-rag-v2",
+  "version": "1.0.0",
+  "description": "text-embedding-nemotron-research-reasoning-qwen-1.5b-reasoning-embedding",
+  "main": "index.js",
+  "scripts": {
+    "dev": "lms dev",
+    "code": "codefetch --include-dir src -o src.md",
+    "push": "lms push"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@lmstudio/sdk": "1.4.0",
+    "zod": "3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.25",
+    "codefetch": "^2.1.2"
+  }
+}
