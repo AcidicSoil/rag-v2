@@ -4,7 +4,7 @@
   "description": "text-embedding-nemotron-research-reasoning-qwen-1.5b-reasoning-embedding",
   "main": "index.js",
   "scripts": {
-    "dev": "lms dev",
+    "dev": "node scripts/populate-models.js && lms dev",
     "code": "codefetch --include-dir src -o src.md",
     "push": "lms push"
   },

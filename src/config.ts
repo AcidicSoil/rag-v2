@@ -1,8 +1,6 @@
-// path: src/config.ts
 import { createConfigSchematics } from "@lmstudio/sdk";
 
-const DEFAULT_EMBEDDING_MODEL =
-  "text-embedding-nemotron-research-reasoning-qwen-1.5b-reasoning-embedding";
+export const AUTO_DETECT_MODEL_ID = "AUTO_DETECT";
 
 export const configSchematics = createConfigSchematics()
   .field(
@@ -10,25 +8,39 @@ export const configSchematics = createConfigSchematics()
     "select",
     {
       displayName: "Embedding Model",
-      subtitle:
-        "Select the embedding model to use for retrieval. Must match a locally available embedding model ID.",
+      subtitle: "Select a model or use Auto-Detect.",
       options: [
-        {
-          value:
-            "text-embedding-nemotron-research-reasoning-qwen-1.5b-reasoning-embedding",
-          displayName: "Nemotron Reasoning Qwen 1.5B (default)",
-        },
-        {
-          value: "qwen3-embedding-8b",
-          displayName: "Qwen3-Embedding-8B",
-        },
-        {
-          value: "kalm-embedding-multilingual-mini-instruct-v2.5",
-          displayName: "KaLM-embedding-multilingual-mini-instruct-v2.5",
-        },
-      ],
+  {
+    "value": "AUTO_DETECT",
+    "displayName": "Auto-Detect (Use first loaded/available)"
+  },
+  {
+    "value": "mradermacher/Euler-Legal-Embedding-V3-GGUF/Euler-Legal-Embedding-V3.Q4_K_S.gguf",
+    "displayName": "Euler-Legal-Embedding-V3.Q4_K_S"
+  },
+  {
+    "value": "mradermacher/Nemotron-Research-Reasoning-Qwen-1.5B-Reasoning-Embedding-GGUF/Nemotron-Research-Reasoning-Qwen-1.5B-Reasoning-Embedding.Q8_0.gguf",
+    "displayName": "Nemotron-Research-Reasoning-Qwen-1.5B-Reasoning-Embedding.Q8_0"
+  },
+  {
+    "value": "nomic-ai/nomic-embed-text-v1.5-GGUF/nomic-embed-text-v1.5.Q4_K_M.gguf",
+    "displayName": "nomic-embed-text-v1.5.Q4_K_M"
+  },
+  {
+    "value": "Aashraf995/KaLM-embedding-multilingual-mini-instruct-v2.5-Q8_0-GGUF/kalm-embedding-multilingual-mini-instruct-v2.5-q8_0.gguf",
+    "displayName": "kalm-embedding-multilingual-mini-instruct-v2.5-q8_0"
+  },
+  {
+    "value": "jinaai/jina-embeddings-v4-text-code-GGUF/jina-embeddings-v4-text-code-Q4_K_M.gguf",
+    "displayName": "jina-embeddings-v4-text-code-Q4_K_M"
+  },
+  {
+    "value": "jinaai/jina-embeddings-v4-text-retrieval-GGUF/jina-embeddings-v4-text-retrieval-Q4_K_M.gguf",
+    "displayName": "jina-embeddings-v4-text-retrieval-Q4_K_M"
+  }
+],
     },
-    DEFAULT_EMBEDDING_MODEL
+    AUTO_DETECT_MODEL_ID,
   )
   .field(
     "retrievalLimit",
@@ -37,11 +49,10 @@ export const configSchematics = createConfigSchematics()
       int: true,
       min: 1,
       displayName: "Retrieval Limit",
-      subtitle:
-        "When retrieval is triggered, this is the maximum number of chunks to return.",
+      subtitle: "Maximum number of chunks to return.",
       slider: { min: 1, max: 10, step: 1 },
     },
-    3
+    3,
   )
   .field(
     "retrievalAffinityThreshold",
@@ -50,10 +61,9 @@ export const configSchematics = createConfigSchematics()
       min: 0.0,
       max: 1.0,
       displayName: "Retrieval Affinity Threshold",
-      subtitle:
-        "The minimum similarity score for a chunk to be considered relevant.",
+      subtitle: "Minimum similarity score for relevance.",
       slider: { min: 0.0, max: 1.0, step: 0.01 },
     },
-    0.5
+    0.5,
   )
   .build();

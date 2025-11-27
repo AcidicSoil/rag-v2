@@ -1,0 +1,32 @@
+
+You have 25 models, taking up 157.04 GB of disk space.
+
+LLM                                               PARAMS     ARCH        SIZE                
+alibaba-nlp_tongyi-deepresearch-30b-a3b@iq2_m     30B-A3B    qwen3moe    9.87 GB             
+alibaba-nlp_tongyi-deepresearch-30b-a3b@q3_k_s    30B-A3B    qwen3moe    13.43 GB            
+allenai_olmo-3-32b-think                          32B        olmo2       14.06 GB            
+internlm_januscoder-14b@q4_k_s                    14B        qwen3       8.57 GB             
+internlm_januscoder-14b@q6_k_l                    14B        qwen3       12.50 GB            
+internlm_januscoder-8b@q4_k_s                     8B         qwen3       4.80 GB             
+internlm_januscoder-8b@q6_k_l                     8B         qwen3       7.03 GB             
+internlm_januscoderv-7b@q4_k_s                    7B         qwen2vl     5.81 GB             
+internlm_januscoderv-7b@q6_k                      7B         qwen2vl     7.61 GB             
+microsoft_fara-7b                                 7B         qwen2vl     5.81 GB             
+miromind-ai_mirothinker-v1.0-8b                   8B         qwen3       4.80 GB             
+osmosis-mcp-4b                                    4.4B       qwen3       6.71 GB             
+pokeeai_pokee_research_7b                         7.6B       Qwen2       4.44 GB             
+qwen_qwen3-vl-4b-instruct                         4B         qwen3vl     4.24 GB     ✓ LOADED
+qwen_qwen3-vl-4b-thinking                         4B         qwen3vl     4.24 GB             
+qwen_qwen3-vl-8b-instruct                         8B         qwen3vl     8.19 GB             
+qwen_qwen3-vl-8b-thinking                         8B         qwen3vl     8.19 GB             
+qwen3-vl-8b-instruct                              8B         qwen3vl     9.80 GB             
+squ11z1_hypnos-i1-8b                              8B         Llama       4.69 GB             
+
+EMBEDDING                                                                   PARAMS    ARCH          SIZE         
+text-embedding-euler-legal-embedding-v3                                     8.2B      qwen3         4.80 GB      
+text-embedding-jina-embeddings-v4-text-code                                 3.1B      qwen2vl       1.93 GB      
+text-embedding-jina-embeddings-v4-text-retrieval                            3.1B      qwen2vl       3.28 GB      
+text-embedding-kalm-embedding-multilingual-mini-instruct-v2.5               0.5B      Qwen2         531.07 MB    
+text-embedding-nemotron-research-reasoning-qwen-1.5b-reasoning-embedding    1.5B      Qwen2         1.65 GB      
+text-embedding-nomic-embed-text-v1.5                                                  Nomic BERT    84.11 MB     
+
