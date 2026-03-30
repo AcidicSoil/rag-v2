@@ -298,6 +298,7 @@ async function chooseContextInjectionStrategy(
 
   const model = await ctl.client.llm.model();
   const ctx = await ctl.pullHistory();
+  ctx.append("user", originalUserPrompt);
 
   const {
     totalTokensInContext,
