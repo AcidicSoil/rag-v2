@@ -1,0 +1,7 @@
+{
+  "type": "plugin",
+  "runner": "node",
+  "owner": "dirty-data",
+  "name": "rag-v2",
+  "revision": 6
+}
