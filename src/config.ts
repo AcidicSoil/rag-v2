@@ -64,4 +64,47 @@ export const configSchematics = createConfigSchematics()
     },
     0.5
   )
+  .field(
+    "answerabilityGateEnabled",
+    "boolean",
+    {
+      displayName: "Answerability Gate",
+      subtitle:
+        "Classify prompts before retrieval to skip casual messages and catch likely no-match cases.",
+    },
+    true
+  )
+  .field(
+    "answerabilityGateThreshold",
+    "numeric",
+    {
+      min: 0.0,
+      max: 1.0,
+      displayName: "Gate Confidence Threshold",
+      subtitle:
+        "Minimum gate confidence required before taking an early non-retrieval path.",
+      slider: { min: 0.0, max: 1.0, step: 0.01 },
+    },
+    0.7
+  )
+  .field(
+    "ambiguousQueryBehavior",
+    "select",
+    {
+      displayName: "Ambiguous Query Behavior",
+      subtitle:
+        "Choose whether ambiguous prompts should trigger a clarification request or continue normally.",
+      options: [
+        {
+          value: "ask-clarification",
+          displayName: "Ask for clarification",
+        },
+        {
+          value: "attempt-best-effort",
+          displayName: "Attempt best effort",
+        },
+      ],
+    },
+    "ask-clarification"
+  )
   .build();

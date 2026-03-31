@@ -8,6 +8,12 @@ import {
   type PromptPreprocessorController,
 } from "@lmstudio/sdk";
 import { configSchematics, AUTO_DETECT_MODEL_ID } from "./config";
+import {
+  buildAmbiguousGateMessage,
+  buildLikelyUnanswerableGateMessage,
+  runAnswerabilityGate,
+} from "./gating";
+import type { AmbiguousQueryBehavior } from "./types/gating";
 
 type DocumentContextInjectionStrategy =
   | "none"
@@ -27,6 +33,43 @@ export async function preprocess(
   const files = history
     .getAllFiles(ctl.client)
     .filter((f) => f.type !== "image");
+  const pluginConfig = ctl.getPluginConfig(configSchematics);
+  const answerabilityGateEnabled = pluginConfig.get("answerabilityGateEnabled");
+  const answerabilityGateThreshold = pluginConfig.get(
+    "answerabilityGateThreshold"
+  );
+  const ambiguousQueryBehavior = pluginConfig.get(
+    "ambiguousQueryBehavior"
+  ) as AmbiguousQueryBehavior;
+
+  if (files.length > 0 && answerabilityGateEnabled) {
+    const gateResult = runAnswerabilityGate(
+      userPrompt,
+      files,
+      answerabilityGateThreshold
+    );
+    ctl.debug(
+      `Answerability gate decision: ${gateResult.decision} (${gateResult.confidence.toFixed(
+        2
+      )})\n${gateResult.reasons.map((reason) => `- ${reason}`).join("\n")}`
+    );
+
+    if (gateResult.decision === "no-retrieval-needed") {
+      return userMessage;
+    }
+
+    if (gateResult.decision === "ambiguous") {
+      return buildAmbiguousGateMessage(
+        userPrompt,
+        files,
+        ambiguousQueryBehavior
+      );
+    }
+
+    if (gateResult.decision === "likely-unanswerable") {
+      return buildLikelyUnanswerableGateMessage(userPrompt);
+    }
+  }
 
   if (newFiles.length > 0) {
     const strategy = await chooseContextInjectionStrategy(

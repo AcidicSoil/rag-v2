@@ -8,6 +8,24 @@ The plan is intentionally staged:
 - improve retrieval quality and reliability inside the current architecture
 - only later add agentic retrieval with a tools provider
 
+
+## Active execution task list
+
+### Immediate implementation slice
+- [x] Review the existing plan, current codebase, and prior maintenance notes.
+- [x] Identify the smallest high-value implementation slice that fits the current architecture.
+- [x] Implement Phase 1A foundation: heuristic answerability gate types, logic, and config.
+- [x] Wire the answerability gate into the prompt preprocessor before retrieval.
+- [ ] Validate the new gate with TypeScript and targeted code review.
+- [ ] Refine the heuristic thresholds and messages based on validation findings.
+
+### Next queued tasks
+- [ ] Add Phase 1A eval cases for no-match and ambiguous prompts.
+- [ ] Implement Phase 1B deterministic multi-query rewrite scaffolding.
+- [ ] Add Phase 1C evidence dedupe and neighbor expansion.
+- [ ] Add Phase 1D retrieved-text sanitization and grounding wrapper.
+- [ ] Build Phase 0 evaluation harness and baseline metrics output.
+
 ---
 
 ## Current baseline
