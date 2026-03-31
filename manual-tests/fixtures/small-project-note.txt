@@ -1,0 +1,5 @@
+Project Phoenix launch date: June 12, 2026.
+Project owner: Maya Chen.
+Primary goal: migrate the billing service without downtime.
+The rollback owner is Darren Lewis.
+The status review happens every Tuesday at 2 PM Central.

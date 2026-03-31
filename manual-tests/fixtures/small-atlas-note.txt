@@ -1,0 +1,5 @@
+Project Atlas launch date: August 4, 2026.
+Project owner: Leo Park.
+Primary goal: consolidate analytics pipelines.
+The executive sponsor is Priya Raman.
+The weekly demo happens every Thursday at 11 AM Central.

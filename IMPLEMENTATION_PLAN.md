@@ -16,7 +16,8 @@ The plan is intentionally staged:
 - [x] Identify the smallest high-value implementation slice that fits the current architecture.
 - [x] Implement Phase 1A foundation: heuristic answerability gate types, logic, and config.
 - [x] Wire the answerability gate into the prompt preprocessor before retrieval.
-- [ ] Validate the new gate with TypeScript and targeted code review.
+- [x] Validate the new gate with TypeScript and targeted code review.
+- [x] Create `LIVE_TEST_SCRIPT.md` for repeatable LM Studio runtime validation.
 - [ ] Refine the heuristic thresholds and messages based on validation findings.
 
 ### Next queued tasks
