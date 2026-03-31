@@ -13,19 +13,19 @@ The plan is intentionally staged:
 
 ### Immediate implementation slice
 - [x] Review the existing plan, current codebase, and prior maintenance notes.
-- [x] Identify the smallest high-value implementation slice that fits the current architecture.
-- [x] Implement Phase 1A foundation: heuristic answerability gate types, logic, and config.
-- [x] Wire the answerability gate into the prompt preprocessor before retrieval.
-- [x] Validate the new gate with TypeScript and targeted code review.
-- [x] Create `LIVE_TEST_SCRIPT.md` for repeatable LM Studio runtime validation.
-- [ ] Refine the heuristic thresholds and messages based on validation findings.
+- [x] Confirm the next decision point from handoff: live validation first, then eval expansion or reranking.
+- [x] Break the next slice into implementation tasks that fit the current prompt-preprocessor architecture.
+- [ ] Run one focused LM Studio live validation pass of the newest retrieval-quality features.
+- [x] Start Phase 2C-lite: define a first heuristic rerank feature set.
+- [x] Wire Phase 2C-lite rerank config and scaffolding into the retrieval pipeline.
+- [x] Validate reranking with TypeScript plus targeted smoke coverage.
+- [ ] Refine rerank weights and defaults based on validation findings.
 
 ### Next queued tasks
-- [ ] Add Phase 1A eval cases for no-match and ambiguous prompts.
-- [ ] Implement Phase 1B deterministic multi-query rewrite scaffolding.
-- [ ] Add Phase 1C evidence dedupe and neighbor expansion.
-- [ ] Add Phase 1D retrieved-text sanitization and grounding wrapper.
-- [ ] Build Phase 0 evaluation harness and baseline metrics output.
+- [ ] Expand eval coverage with hard, adversarial, and no-match retrieval cases.
+- [ ] Add a richer rerank smoke/eval matrix covering redundancy and complementary evidence selection.
+- [ ] Revisit neighbor expansion only if future SDK retrieval metadata exposes adjacency.
+- [ ] Consider a lightweight lexical/hybrid retrieval slice before any model-based rerank hook.
 
 ---
 

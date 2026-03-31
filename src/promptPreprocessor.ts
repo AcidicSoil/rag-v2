@@ -16,6 +16,7 @@ import {
   formatEvidenceBlocks,
 } from "./evidence";
 import { fuseRetrievalEntries } from "./fusion";
+import { rerankRetrievalEntries } from "./rerank";
 import {
   buildGroundingInstruction,
   sanitizeEvidenceBlocks,
@@ -28,6 +29,7 @@ import {
 import { generateQueryRewrites } from "./queryRewrite";
 import type { AmbiguousQueryBehavior } from "./types/gating";
 import type { RetrievalFusionMethod } from "./types/retrieval";
+import type { RerankStrategy } from "./types/rerank";
 import type { StrictGroundingMode } from "./types/safety";
 
 type DocumentContextInjectionStrategy =
@@ -133,6 +135,11 @@ async function prepareRetrievalResultsContextInjection(
   const maxCandidatesBeforeRerank = pluginConfig.get(
     "maxCandidatesBeforeRerank"
   );
+  const rerankEnabled = pluginConfig.get("rerankEnabled");
+  const rerankTopK = pluginConfig.get("rerankTopK");
+  const rerankStrategy = pluginConfig.get(
+    "rerankStrategy"
+  ) as RerankStrategy;
   const dedupeSimilarityThreshold = pluginConfig.get(
     "dedupeSimilarityThreshold"
   );
@@ -292,11 +299,47 @@ async function prepareRetrievalResultsContextInjection(
     const filteredEntries = fusedEntries.filter(
       (entry) => entry.score > retrievalAffinityThreshold
     ) as Array<RetrievalResultEntry>;
+    const rankedEntries = rerankEnabled
+      ? rerankRetrievalEntries(originalUserPrompt, filteredEntries, {
+          topK: rerankTopK,
+          strategy: rerankStrategy,
+        })
+      : filteredEntries.slice(0, rerankTopK).map((entry) => ({
+          entry,
+          originalScore: entry.score,
+          rerankScore: entry.score,
+          features: {
+            lexicalOverlap: 0,
+            headingMatch: 0,
+            completeness: 0,
+            sectionRelevance: 0,
+            diversityPenalty: 0,
+          },
+        }));
+    const rerankedEntries = rankedEntries.map((rankedEntry) => ({
+      ...rankedEntry.entry,
+      score: rankedEntry.rerankScore,
+    }));
     result.entries = dedupeEvidenceEntries(
-      filteredEntries,
+      rerankedEntries,
       dedupeSimilarityThreshold,
       maxEvidenceBlocks
     );
+
+    if (rerankEnabled && rankedEntries.length > 0) {
+      ctl.debug(
+        `Reranked evidence candidates:\n${rankedEntries
+          .map(
+            (rankedEntry, index) =>
+              `${index + 1}. ${rankedEntry.entry.source.name} :: ${rankedEntry.rerankScore.toFixed(
+                3
+              )} (semantic=${rankedEntry.originalScore.toFixed(3)}, overlap=${rankedEntry.features.lexicalOverlap.toFixed(
+                2
+              )}, diversityPenalty=${rankedEntry.features.diversityPenalty.toFixed(2)})`
+          )
+          .join("\n")}`
+      );
+    }
 
     // --- Format Response ---
     let processedContent = "";

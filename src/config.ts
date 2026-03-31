@@ -162,6 +162,44 @@ export const configSchematics = createConfigSchematics()
       slider: { min: 1, max: 20, step: 1 },
     },
     6
+    )
+  .field(
+    "rerankEnabled",
+    "boolean",
+    {
+      displayName: "Rerank Fused Candidates",
+      subtitle:
+        "Apply a heuristic reranker so evidence selection favors support quality and diversity, not just similarity.",
+    },
+    true
+  )
+  .field(
+    "rerankTopK",
+    "numeric",
+    {
+      int: true,
+      min: 1,
+      max: 20,
+      displayName: "Rerank Top K",
+      subtitle: "Number of fused candidates to keep after reranking.",
+      slider: { min: 1, max: 20, step: 1 },
+    },
+    4
+  )
+  .field(
+    "rerankStrategy",
+    "select",
+    {
+      displayName: "Rerank Strategy",
+      subtitle: "Choose how fused retrieval candidates are reranked before evidence packaging.",
+      options: [
+        {
+          value: "heuristic-v1",
+          displayName: "Heuristic v1",
+        },
+      ],
+    },
+    "heuristic-v1"
   )
   .field(
     "dedupeSimilarityThreshold",
