@@ -189,4 +189,48 @@ export const configSchematics = createConfigSchematics()
     },
     4
   )
+  .field(
+    "sanitizeRetrievedText",
+    "boolean",
+    {
+      displayName: "Sanitize Retrieved Text",
+      subtitle:
+        "Normalize retrieved text before injection to reduce noisy markup and formatting artifacts.",
+    },
+    true
+  )
+  .field(
+    "stripInstructionalSpans",
+    "boolean",
+    {
+      displayName: "Strip Instruction-Like Spans",
+      subtitle:
+        "Replace obviously instruction-like retrieved text with a neutral placeholder before injection.",
+    },
+    true
+  )
+  .field(
+    "strictGroundingMode",
+    "select",
+    {
+      displayName: "Strict Grounding Mode",
+      subtitle:
+        "Control how strongly the injected prompt should constrain the model to retrieved evidence.",
+      options: [
+        {
+          value: "off",
+          displayName: "Off",
+        },
+        {
+          value: "warn-on-weak-evidence",
+          displayName: "Warn on weak evidence",
+        },
+        {
+          value: "require-evidence",
+          displayName: "Require evidence",
+        }
+      ],
+    },
+    "warn-on-weak-evidence"
+  )
   .build();
