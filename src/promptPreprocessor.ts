@@ -8,12 +8,15 @@ import {
   type PromptPreprocessorController,
 } from "@lmstudio/sdk";
 import { configSchematics, AUTO_DETECT_MODEL_ID } from "./config";
+import { fuseRetrievalEntries } from "./fusion";
 import {
   buildAmbiguousGateMessage,
   buildLikelyUnanswerableGateMessage,
   runAnswerabilityGate,
 } from "./gating";
+import { generateQueryRewrites } from "./queryRewrite";
 import type { AmbiguousQueryBehavior } from "./types/gating";
+import type { RetrievalFusionMethod } from "./types/retrieval";
 
 type DocumentContextInjectionStrategy =
   | "none"
@@ -110,6 +113,14 @@ async function prepareRetrievalResultsContextInjection(
   const retrievalAffinityThreshold = pluginConfig.get(
     "retrievalAffinityThreshold"
   );
+  const multiQueryEnabled = pluginConfig.get("multiQueryEnabled");
+  const multiQueryCount = pluginConfig.get("multiQueryCount");
+  const fusionMethod = pluginConfig.get(
+    "fusionMethod"
+  ) as RetrievalFusionMethod;
+  const maxCandidatesBeforeRerank = pluginConfig.get(
+    "maxCandidatesBeforeRerank"
+  );
 
   const statusSteps = new Map<FileHandle, PredictionProcessStatusController>();
 
@@ -166,56 +177,94 @@ async function prepareRetrievalResultsContextInjection(
       text: `Retrieving relevant citations using ${embeddingModel.identifier}...`,
     });
 
-    const result = await ctl.client.files.retrieve(originalUserPrompt, files, {
-      embeddingModel: embeddingModel,
-      limit: retrievalLimit,
-      signal: ctl.abortSignal,
-      onFileProcessList(filesToProcess) {
-        for (const file of filesToProcess) {
-          statusSteps.set(
-            file,
-            retrievingStatus.addSubStatus({
-              status: "waiting",
-              text: `Process ${file.name} for retrieval`,
-            })
-          );
-        }
-      },
-      onFileProcessingStart(file) {
-        statusSteps
-          .get(file)!
-          .setState({
+    const queryRewrites = multiQueryEnabled
+      ? generateQueryRewrites(originalUserPrompt, multiQueryCount)
+      : [{ label: "original", text: originalUserPrompt }];
+
+    ctl.debug(
+      `Retrieval query variants:\n${queryRewrites
+        .map((rewrite, index) => `${index + 1}. [${rewrite.label}] ${rewrite.text}`)
+        .join("\n")}`
+    );
+
+    const retrievalRuns: Array<any> = [];
+    let primaryResult: any = null;
+
+    for (const [index, rewrite] of queryRewrites.entries()) {
+      retrievingStatus.setState({
+        status: "loading",
+        text: `Retrieving citations (${index + 1}/${queryRewrites.length}) using ${embeddingModel.identifier}...`,
+      });
+
+      const retrievalOptions: any = {
+        embeddingModel: embeddingModel,
+        limit: maxCandidatesBeforeRerank,
+        signal: ctl.abortSignal,
+      };
+
+      if (index === 0) {
+        retrievalOptions.onFileProcessList = (filesToProcess: Array<FileHandle>) => {
+          for (const file of filesToProcess) {
+            statusSteps.set(
+              file,
+              retrievingStatus.addSubStatus({
+                status: "waiting",
+                text: `Process ${file.name} for retrieval`,
+              })
+            );
+          }
+        };
+        retrievalOptions.onFileProcessingStart = (file: FileHandle) => {
+          statusSteps.get(file)!.setState({
             status: "loading",
             text: `Processing ${file.name} for retrieval`,
           });
-      },
-      onFileProcessingEnd(file) {
-        statusSteps
-          .get(file)!
-          .setState({
+        };
+        retrievalOptions.onFileProcessingEnd = (file: FileHandle) => {
+          statusSteps.get(file)!.setState({
             status: "done",
             text: `Processed ${file.name} for retrieval`,
           });
-      },
-      onFileProcessingStepProgress(file, step, progressInStep) {
-        const verb =
-          step === "loading"
-            ? "Loading"
-            : step === "chunking"
-            ? "Chunking"
-            : "Embedding";
-        statusSteps.get(file)!.setState({
-          status: "loading",
-          text: `${verb} ${file.name} for retrieval (${(
-            progressInStep * 100
-          ).toFixed(1)}%)`,
-        });
-      },
-    });
+        };
+        retrievalOptions.onFileProcessingStepProgress = (
+          file: FileHandle,
+          step: string,
+          progressInStep: number
+        ) => {
+          const verb =
+            step === "loading"
+              ? "Loading"
+              : step === "chunking"
+              ? "Chunking"
+              : "Embedding";
+          statusSteps.get(file)!.setState({
+            status: "loading",
+            text: `${verb} ${file.name} for retrieval (${(
+              progressInStep * 100
+            ).toFixed(1)}%)`,
+          });
+        };
+      }
 
-    result.entries = result.entries.filter(
-      (entry) => entry.score > retrievalAffinityThreshold
-    );
+      const retrievalRun = await ctl.client.files.retrieve(
+        rewrite.text,
+        files,
+        retrievalOptions
+      );
+      retrievalRuns.push(retrievalRun);
+      if (index === 0) {
+        primaryResult = retrievalRun;
+      }
+    }
+
+    const fusedEntries = fuseRetrievalEntries(
+      retrievalRuns.map((run) => run.entries),
+      fusionMethod,
+      retrievalLimit
+    ).filter((entry) => entry.score > retrievalAffinityThreshold);
+
+    const result = primaryResult ?? { entries: [] };
+    result.entries = fusedEntries;
 
     // --- Format Response ---
     let processedContent = "";
@@ -230,8 +279,8 @@ async function prepareRetrievalResultsContextInjection(
         "The following citations were found in the files provided by the user:\n\n";
       processedContent += prefix;
       let citationNumber = 1;
-      result.entries.forEach((result) => {
-        processedContent += `Citation ${citationNumber}: "${result.content}"\n\n`;
+      result.entries.forEach((entry: any) => {
+        processedContent += `Citation ${citationNumber}: "${entry.content}"\n\n`;
         citationNumber++;
       });
       await ctl.addCitations(result);

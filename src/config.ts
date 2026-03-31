@@ -107,4 +107,60 @@ export const configSchematics = createConfigSchematics()
     },
     "ask-clarification"
   )
+  .field(
+    "multiQueryEnabled",
+    "boolean",
+    {
+      displayName: "Multi-Query Retrieval",
+      subtitle:
+        "Generate a few deterministic query rewrites and fuse the retrieval results.",
+    },
+    false
+  )
+  .field(
+    "multiQueryCount",
+    "numeric",
+    {
+      int: true,
+      min: 1,
+      max: 4,
+      displayName: "Multi-Query Count",
+      subtitle: "Maximum number of query variants to run during retrieval.",
+      slider: { min: 1, max: 4, step: 1 },
+    },
+    3
+  )
+  .field(
+    "fusionMethod",
+    "select",
+    {
+      displayName: "Fusion Method",
+      subtitle: "How to combine results from multiple retrieval queries.",
+      options: [
+        {
+          value: "reciprocal-rank-fusion",
+          displayName: "Reciprocal rank fusion",
+        },
+        {
+          value: "max-score",
+          displayName: "Max score",
+        },
+      ],
+    },
+    "reciprocal-rank-fusion"
+  )
+  .field(
+    "maxCandidatesBeforeRerank",
+    "numeric",
+    {
+      int: true,
+      min: 1,
+      max: 20,
+      displayName: "Max Candidates Before Rerank",
+      subtitle:
+        "Maximum number of fused retrieval candidates to keep before later reranking work is added.",
+      slider: { min: 1, max: 20, step: 1 },
+    },
+    6
+  )
   .build();
