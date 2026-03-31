@@ -47,7 +47,7 @@ Lightweight regression eval:
 npm run eval
 ```
 
-The eval runner reads cases from `eval/cases/basic.jsonl` and writes the latest results to `eval/results/basic-latest.json`.
+The eval runner reads every JSONL suite in `eval/cases/` (currently `basic.jsonl` and `hard.jsonl`) and writes the latest aggregated results to `eval/results/all-latest.json`.
 
 ## Configuration
 

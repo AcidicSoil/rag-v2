@@ -94,7 +94,7 @@ export function generateQueryRewrites(
     text: buildSplitRewrite(prompt),
   });
   uniquePush(rewrites, {
-    label: "quoted",
+    label: "quoted-span",
     text: buildQuotedRewrite(prompt),
   });
 

@@ -1,12 +1,14 @@
-import { readFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { readFileSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { RetrievalResultEntry } from "@lmstudio/sdk";
 import { dedupeEvidenceEntries } from "../src/evidence";
 import { runAnswerabilityGate } from "../src/gating";
 import { buildEvalMetrics } from "../src/metrics";
 import { generateQueryRewrites } from "../src/queryRewrite";
+import { rerankRetrievalEntries } from "../src/rerank";
 import { buildGroundingInstruction, sanitizeRetrievedText } from "../src/safety";
 import type { EvalCase } from "../src/types/eval";
+import type { RerankStrategy } from "../src/types/rerank";
 import type { StrictGroundingMode } from "../src/types/safety";
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -22,6 +24,17 @@ function loadCases(path: string): Array<EvalCase> {
     .map((line) => line.trim())
     .filter((line) => line.length > 0)
     .map((line) => JSON.parse(line) as EvalCase);
+}
+
+function loadCaseSuites(casesDir: string): Array<{ name: string; path: string; cases: Array<EvalCase> }> {
+  return readdirSync(casesDir)
+    .filter((fileName) => fileName.endsWith(".jsonl"))
+    .sort((left, right) => left.localeCompare(right))
+    .map((fileName) => ({
+      name: fileName.replace(/\.jsonl$/, ""),
+      path: join(casesDir, fileName),
+      cases: loadCases(join(casesDir, fileName)),
+    }));
 }
 
 function makeFileHandle(name: string) {
@@ -140,32 +153,102 @@ function evaluateCase(testCase: EvalCase) {
       }
       return { summary: `${testCase.id}: sanitized` };
     }
+    case "rerank": {
+      const prompt = String(testCase.input.prompt);
+      const entries = ((testCase.input.entries as Array<any>) ?? []).map(
+        makeRetrievalEntry
+      );
+      const topK = Number(testCase.input.topK ?? entries.length);
+      const strategy = String(
+        testCase.input.strategy ?? "heuristic-v1"
+      ) as RerankStrategy;
+      const ranked = rerankRetrievalEntries(prompt, entries, {
+        topK,
+        strategy,
+      });
+      const expectedTopSourceName = String(
+        testCase.expected.topSourceName ?? ""
+      );
+      const expectedTopIncludes = String(
+        testCase.expected.topIncludes ?? ""
+      );
+      const expectedLastIncludes = String(
+        testCase.expected.lastIncludes ?? ""
+      );
+      const minTopLexicalOverlap = Number(
+        testCase.expected.minTopLexicalOverlap ?? 0
+      );
+      const maxSecondDiversityPenalty = Number(
+        testCase.expected.maxSecondDiversityPenalty ?? Number.POSITIVE_INFINITY
+      );
+
+      assert(ranked.length > 0, "Expected at least one reranked entry.");
+      if (expectedTopSourceName) {
+        assert(
+          ranked[0]?.entry.source.name === expectedTopSourceName,
+          `Expected top source '${expectedTopSourceName}', got '${ranked[0]?.entry.source.name}'.`
+        );
+      }
+      if (expectedTopIncludes) {
+        assert(
+          ranked[0]?.entry.content.includes(expectedTopIncludes),
+          `Expected top reranked entry to include '${expectedTopIncludes}'.`
+        );
+      }
+      if (expectedLastIncludes) {
+        assert(
+          ranked[ranked.length - 1]?.entry.content.includes(expectedLastIncludes),
+          `Expected last reranked entry to include '${expectedLastIncludes}'.`
+        );
+      }
+      assert(
+        ranked[0]!.features.lexicalOverlap >= minTopLexicalOverlap,
+        `Expected top lexical overlap >= ${minTopLexicalOverlap}, got ${ranked[0]!.features.lexicalOverlap}.`
+      );
+      if (ranked.length > 1 && Number.isFinite(maxSecondDiversityPenalty)) {
+        assert(
+          ranked[1]!.features.diversityPenalty <= maxSecondDiversityPenalty,
+          `Expected second diversity penalty <= ${maxSecondDiversityPenalty}, got ${ranked[1]!.features.diversityPenalty}.`
+        );
+      }
+      return { summary: `${testCase.id}: reranked ${ranked.length} entries` };
+    }
     default:
       throw new Error(`Unsupported eval component: ${testCase.component}`);
   }
 }
 
 function main() {
-  const casesPath = join(process.cwd(), "eval/cases/basic.jsonl");
+  const casesDir = join(process.cwd(), "eval/cases");
   const resultDir = join(process.cwd(), "eval/results");
-  const cases = loadCases(casesPath);
-  const caseResults: Array<{ id: string; ok: boolean; summary: string; error?: string }> = [];
+  const suites = loadCaseSuites(casesDir);
+  const caseResults: Array<{
+    suite: string;
+    id: string;
+    ok: boolean;
+    summary: string;
+    error?: string;
+  }> = [];
 
-  for (const testCase of cases) {
-    try {
-      const result = evaluateCase(testCase);
-      caseResults.push({
-        id: testCase.id,
-        ok: true,
-        summary: result.summary,
-      });
-    } catch (error) {
-      caseResults.push({
-        id: testCase.id,
-        ok: false,
-        summary: `${testCase.id}: failed`,
-        error: error instanceof Error ? error.message : String(error),
-      });
+  for (const suite of suites) {
+    for (const testCase of suite.cases) {
+      try {
+        const result = evaluateCase(testCase);
+        caseResults.push({
+          suite: suite.name,
+          id: testCase.id,
+          ok: true,
+          summary: result.summary,
+        });
+      } catch (error) {
+        caseResults.push({
+          suite: suite.name,
+          id: testCase.id,
+          ok: false,
+          summary: `${testCase.id}: failed`,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
   }
 
@@ -174,23 +257,43 @@ function main() {
     caseResults.filter((result) => result.ok).length
   );
 
+  const suiteMetrics = suites.map((suite) => {
+    const suiteResults = caseResults.filter((result) => result.suite === suite.name);
+    return {
+      suite: suite.name,
+      metrics: buildEvalMetrics(
+        suiteResults.length,
+        suiteResults.filter((result) => result.ok).length
+      ),
+    };
+  });
+
   mkdirSync(resultDir, { recursive: true });
   const output = {
     generatedAt: new Date().toISOString(),
     metrics,
+    suiteMetrics,
     caseResults,
   };
-  const outputPath = join(resultDir, "basic-latest.json");
+  const outputPath = join(resultDir, "all-latest.json");
   writeFileSync(outputPath, JSON.stringify(output, null, 2));
 
   console.log("Eval run complete.\n");
+  console.log(`Suites: ${suites.length}`);
   console.log(`Cases: ${metrics.totalCases}`);
   console.log(`Passed: ${metrics.passedCases}`);
   console.log(`Failed: ${metrics.failedCases}`);
   console.log(`Accuracy: ${(metrics.accuracy * 100).toFixed(1)}%\n`);
 
+  for (const suiteMetric of suiteMetrics) {
+    console.log(
+      `Suite ${suiteMetric.suite}: ${suiteMetric.metrics.passedCases}/${suiteMetric.metrics.totalCases} passed`
+    );
+  }
+  console.log("");
+
   for (const result of caseResults) {
-    console.log(`${result.ok ? "PASS" : "FAIL"} ${result.summary}`);
+    console.log(`[${result.suite}] ${result.ok ? "PASS" : "FAIL"} ${result.summary}`);
     if (result.error) {
       console.log(`  ${result.error}`);
     }

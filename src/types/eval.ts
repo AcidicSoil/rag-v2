@@ -1,4 +1,4 @@
-export type EvalComponent = "gate" | "rewrite" | "evidence" | "safety";
+export type EvalComponent = "gate" | "rewrite" | "evidence" | "safety" | "rerank";
 
 export interface EvalCase {
   id: string;

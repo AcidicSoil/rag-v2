@@ -1,0 +1,103 @@
+{
+  "generatedAt": "2026-03-31T05:32:51.346Z",
+  "metrics": {
+    "totalCases": 12,
+    "passedCases": 12,
+    "failedCases": 0,
+    "accuracy": 1
+  },
+  "suiteMetrics": [
+    {
+      "suite": "basic",
+      "metrics": {
+        "totalCases": 6,
+        "passedCases": 6,
+        "failedCases": 0,
+        "accuracy": 1
+      }
+    },
+    {
+      "suite": "hard",
+      "metrics": {
+        "totalCases": 6,
+        "passedCases": 6,
+        "failedCases": 0,
+        "accuracy": 1
+      }
+    }
+  ],
+  "caseResults": [
+    {
+      "suite": "basic",
+      "id": "gate-social-1",
+      "ok": true,
+      "summary": "gate-social-1: no-retrieval-needed"
+    },
+    {
+      "suite": "basic",
+      "id": "gate-ambiguous-1",
+      "ok": true,
+      "summary": "gate-ambiguous-1: ambiguous"
+    },
+    {
+      "suite": "basic",
+      "id": "gate-unanswerable-1",
+      "ok": true,
+      "summary": "gate-unanswerable-1: likely-unanswerable"
+    },
+    {
+      "suite": "basic",
+      "id": "rewrite-compound-1",
+      "ok": true,
+      "summary": "rewrite-compound-1: 4 rewrites"
+    },
+    {
+      "suite": "basic",
+      "id": "evidence-dedupe-1",
+      "ok": true,
+      "summary": "evidence-dedupe-1: 2 deduped entries"
+    },
+    {
+      "suite": "basic",
+      "id": "safety-sanitize-1",
+      "ok": true,
+      "summary": "safety-sanitize-1: sanitized"
+    },
+    {
+      "suite": "hard",
+      "id": "gate-ambiguous-short-followup-1",
+      "ok": true,
+      "summary": "gate-ambiguous-short-followup-1: ambiguous"
+    },
+    {
+      "suite": "hard",
+      "id": "gate-unanswerable-external-fact-1",
+      "ok": true,
+      "summary": "gate-unanswerable-external-fact-1: likely-unanswerable"
+    },
+    {
+      "suite": "hard",
+      "id": "rewrite-quoted-span-1",
+      "ok": true,
+      "summary": "rewrite-quoted-span-1: 3 rewrites"
+    },
+    {
+      "suite": "hard",
+      "id": "evidence-dedupe-cross-file-1",
+      "ok": true,
+      "summary": "evidence-dedupe-cross-file-1: 3 deduped entries"
+    },
+    {
+      "suite": "hard",
+      "id": "rerank-completeness-priority-1",
+      "ok": true,
+      "summary": "rerank-completeness-priority-1: reranked 3 entries"
+    },
+    {
+      "suite": "hard",
+      "id": "rerank-diversity-penalty-1",
+      "ok": true,
+      "summary": "rerank-diversity-penalty-1: reranked 3 entries"
+    }
+  ]
+}

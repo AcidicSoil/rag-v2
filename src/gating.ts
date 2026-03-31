@@ -11,14 +11,15 @@ const SOCIAL_ONLY_PATTERNS = [
 
 const AMBIGUOUS_PATTERNS = [
   /\b(this|that|it|these|those)\b/i,
+  /\b(other one|which one|which file|which project)\b/i,
   /\b(what about|thoughts on|can you explain|help me understand)\b/i,
   /\b(more|details|clarify|expand)\b/i,
 ];
 
 const CURRENT_EVENTS_PATTERNS = [
-  /\b(today|latest|currently|right now|as of now|breaking news)\b/i,
+  /\b(today|latest|currently|right now|as of now|breaking news|most recent|current)\b/i,
   /\b(weather|forecast|stock price|share price|election|president|prime minister)\b/i,
-  /\b(score|standings|market cap|exchange rate)\b/i,
+  /\b(score|standings|market cap|exchange rate|super bowl|world cup|champion)\b/i,
 ];
 
 function normalizePrompt(prompt: string) {
@@ -64,7 +65,7 @@ export function runAnswerabilityGate(
   ).length;
   const wordCount = normalizedPrompt.split(" ").length;
 
-  if (wordCount <= 3 && ambiguousSignals > 0) {
+  if (wordCount <= 4 && ambiguousSignals > 0) {
     reasons.push("The prompt is very short and relies on deictic language.");
   }
   if (files.length > 1 && ambiguousSignals > 0 && fileNameMentions === 0) {

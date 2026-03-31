@@ -22,8 +22,8 @@ The plan is intentionally staged:
 - [ ] Refine rerank weights and defaults based on validation findings.
 
 ### Next queued tasks
-- [ ] Expand eval coverage with hard, adversarial, and no-match retrieval cases.
-- [ ] Add a richer rerank smoke/eval matrix covering redundancy and complementary evidence selection.
+- [x] Expand eval coverage with hard, adversarial, and no-match retrieval cases.
+- [x] Add a richer rerank smoke/eval matrix covering redundancy and complementary evidence selection.
 - [ ] Revisit neighbor expansion only if future SDK retrieval metadata exposes adjacency.
 - [ ] Consider a lightweight lexical/hybrid retrieval slice before any model-based rerank hook.
 
