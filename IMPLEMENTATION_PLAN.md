@@ -11,20 +11,26 @@ The plan is intentionally staged:
 
 ## Active execution task list
 
-### Immediate implementation slice
-- [x] Review the current implementation plan, repo state, and prior handoff notes.
-- [x] Research current reranking direction and confirm that learned rerankers should remain a second-stage optional path.
-- [x] Break the reranking next step into a small implementation task list that fits the prompt-preprocessor architecture.
-- [x] Add rerank strategy scaffolding for an optional model-assisted rerank stage.
-- [x] Implement a best-effort LLM-assisted rerank hook after heuristic candidate narrowing.
-- [x] Add deterministic parsing/merge tests for model-assisted reranking.
-- [x] Validate with TypeScript and targeted smoke coverage.
+### MCP extraction tranche
+- [x] Review the MCP-oriented architecture note and current repo state.
+- [x] Confirm the live integration constraints: LM Studio prompt preprocessors/tools providers are plugin hooks, while MCP uses separate servers and transports.
+- [x] Turn the MCP note into a staged task list that preserves the existing plugin while carving out a reusable core.
+- [x] Introduce transport-agnostic core contracts for documents, candidates, evidence blocks, and rerank outputs.
+- [x] Extract the retrieval post-processing pipeline behind those contracts (fusion, hybrid merge, heuristic rerank, dedupe, evidence assembly).
+- [x] Add an LM Studio bridge layer that converts between LM Studio retrieval entries and the new core contracts.
+- [x] Rewire the prompt preprocessor to use the extracted core pipeline without changing current plugin behavior.
+- [x] Move gating, rewrite generation, corrective assessment, and safety helpers behind the same core contract boundary.
+- [x] Add first-pass MCP request/response schemas for `rag_answer`, `rag_search`, `corpus_inspect`, and `rerank_only`.
+- [x] Add smoke coverage for the extracted core pipeline, policy helpers, and bridge conversions.
+- [ ] Sketch the next extraction step: adapter-specific retrieval/file-loading interfaces.
+- [ ] Only after that, scaffold the MCP server package and first tool handlers.
 
-### Next queued tasks
-- [x] Expand eval coverage with hard, adversarial, and no-match retrieval cases.
-- [x] Add a richer rerank smoke/eval matrix covering redundancy and complementary evidence selection.
-- [ ] Revisit neighbor expansion only if future SDK retrieval metadata exposes adjacency.
-- [x] Consider a lightweight lexical/hybrid retrieval slice before any model-based rerank hook.
+### Working task list after this slice
+- [ ] Add `src/core/pipeline.ts`-level eval cases independent of LM Studio runtime objects.
+- [ ] Move gating, rewrite, corrective assessment, and safety behind the same core contract boundary.
+- [ ] Introduce explicit adapter folders (`adapter-lmstudio`, later `mcp-server`) once the in-repo extraction stabilizes.
+- [ ] Define `rag_answer`, `rag_search`, `corpus_inspect`, and `rerank_only` request/response schemas.
+- [ ] Add a stdio-first MCP scaffold after the extraction boundary is validated.
 
 ---
 

@@ -10,16 +10,21 @@ import {
   type RetrievalResultEntry,
 } from "@lmstudio/sdk";
 import { configSchematics, AUTO_DETECT_MODEL_ID } from "./config";
+import { formatEvidenceBlocks } from "./evidence";
 import {
-  buildEvidenceBlocks,
-  dedupeEvidenceEntries,
-  formatEvidenceBlocks,
-} from "./evidence";
-import { fuseRetrievalEntries } from "./fusion";
-import { mergeHybridCandidates } from "./hybridRetrieve";
+  buildRagEvidenceBlocks,
+  dedupeRagCandidates,
+  fuseRagCandidates,
+  mergeHybridRagCandidates,
+  rerankRagCandidates,
+} from "./core/retrievalPipeline";
 import { lexicalRetrieve } from "./lexicalRetrieve";
+import {
+  toEvidenceBlocks,
+  toRagCandidates,
+  toRetrievalResultEntries,
+} from "./lmstudioCoreBridge";
 import { performModelAssistedRerank } from "./modelRerank";
-import { rerankRetrievalEntries } from "./rerank";
 import {
   buildGroundingInstruction,
   sanitizeEvidenceBlocks,
@@ -29,6 +34,10 @@ import {
   buildLikelyUnanswerableGateMessage,
   runAnswerabilityGate,
 } from "./gating";
+import {
+  assessCorrectiveNeed,
+  buildCorrectiveQueryPlan,
+} from "./corrective";
 import { generateQueryRewrites } from "./queryRewrite";
 import type { AmbiguousQueryBehavior } from "./types/gating";
 import type { RetrievalFusionMethod } from "./types/retrieval";
@@ -218,134 +227,203 @@ async function prepareRetrievalResultsContextInjection(
       text: `Retrieving relevant citations using ${embeddingModel.identifier}...`,
     });
 
-    const queryRewrites = multiQueryEnabled
+    const correctiveRetrievalEnabled = pluginConfig.get(
+      "correctiveRetrievalEnabled"
+    );
+    const correctiveMaxAttempts = pluginConfig.get("correctiveMaxAttempts");
+    const correctiveMinEvidenceScore = pluginConfig.get(
+      "correctiveMinEvidenceScore"
+    );
+    const correctiveMinAspectCoverage = pluginConfig.get(
+      "correctiveMinAspectCoverage"
+    );
+
+    const initialQueryRewrites = multiQueryEnabled
       ? generateQueryRewrites(originalUserPrompt, multiQueryCount)
       : [{ label: "original", text: originalUserPrompt }];
 
-    ctl.debug(
-      `Retrieval query variants:\n${queryRewrites
-        .map((rewrite, index) => `${index + 1}. [${rewrite.label}] ${rewrite.text}`)
-        .join("\n")}`
-    );
-
-    const retrievalRuns: Array<RetrievalResult> = [];
-    let primaryResult: RetrievalResult | null = null;
-
-    for (const [index, rewrite] of queryRewrites.entries()) {
-      retrievingStatus.setState({
-        status: "loading",
-        text: `Retrieving citations (${index + 1}/${queryRewrites.length}) using ${embeddingModel.identifier}...`,
-      });
-
-      const retrievalOptions: any = {
-        embeddingModel: embeddingModel,
-        limit: maxCandidatesBeforeRerank,
-        signal: ctl.abortSignal,
-      };
-
-      if (index === 0) {
-        retrievalOptions.onFileProcessList = (filesToProcess: Array<FileHandle>) => {
-          for (const file of filesToProcess) {
-            statusSteps.set(
+    const parsedDocuments = hybridEnabled
+      ? await Promise.all(
+          files.map(async (file) => {
+            const parsed = await ctl.client.files.parseDocument(file, {
+              signal: ctl.abortSignal,
+            });
+            return {
               file,
-              retrievingStatus.addSubStatus({
-                status: "waiting",
-                text: `Process ${file.name} for retrieval`,
-              })
-            );
-          }
-        };
-        retrievalOptions.onFileProcessingStart = (file: FileHandle) => {
-          statusSteps.get(file)!.setState({
-            status: "loading",
-            text: `Processing ${file.name} for retrieval`,
-          });
-        };
-        retrievalOptions.onFileProcessingEnd = (file: FileHandle) => {
-          statusSteps.get(file)!.setState({
-            status: "done",
-            text: `Processed ${file.name} for retrieval`,
-          });
-        };
-        retrievalOptions.onFileProcessingStepProgress = (
-          file: FileHandle,
-          step: string,
-          progressInStep: number
-        ) => {
-          const verb =
-            step === "loading"
-              ? "Loading"
-              : step === "chunking"
-              ? "Chunking"
-              : "Embedding";
-          statusSteps.get(file)!.setState({
-            status: "loading",
-            text: `${verb} ${file.name} for retrieval (${(
-              progressInStep * 100
-            ).toFixed(1)}%)`,
-          });
-        };
-      }
+              content: parsed.content,
+            };
+          })
+        )
+      : null;
 
-      const retrievalRun = await ctl.client.files.retrieve(
-        rewrite.text,
-        files,
-        retrievalOptions
-      );
-      retrievalRuns.push(retrievalRun);
-      if (index === 0) {
-        primaryResult = retrievalRun;
-      }
-    }
+    let activeQueryRewrites = initialQueryRewrites;
+    let candidateEntries: Array<RetrievalResultEntry> = [];
+    let primaryResult: RetrievalResult | null = null;
+    let result: RetrievalResult = { entries: [] };
+    let lastAssessment: ReturnType<typeof assessCorrectiveNeed> | null = null;
 
-    const fusedEntries = fuseRetrievalEntries(
-      retrievalRuns.map((run) => run.entries),
-      fusionMethod,
-      maxCandidatesBeforeRerank
-    );
-
-    let candidateEntries = fusedEntries;
-    if (hybridEnabled) {
-      retrievingStatus.setState({
-        status: "loading",
-        text: `Scoring local lexical candidates across attached files...`,
-      });
-      const parsedDocuments = await Promise.all(
-        files.map(async (file) => {
-          const parsed = await ctl.client.files.parseDocument(file, {
-            signal: ctl.abortSignal,
-          });
-          return {
-            file,
-            content: parsed.content,
-          };
-        })
-      );
-      const lexicalEntries = lexicalRetrieve(
-        originalUserPrompt,
-        parsedDocuments,
-        hybridCandidateCount
-      );
-      candidateEntries = mergeHybridCandidates(fusedEntries, lexicalEntries, {
-        semanticWeight,
-        lexicalWeight,
-        maxCandidates: hybridCandidateCount,
-      });
+    for (let attempt = 0; attempt <= correctiveMaxAttempts; attempt += 1) {
       ctl.debug(
-        `Hybrid retrieval merged ${fusedEntries.length} semantic candidates with ${lexicalEntries.length} lexical candidates into ${candidateEntries.length} hybrid candidates.`
+        `Retrieval query variants (attempt ${attempt + 1}):\n${activeQueryRewrites
+          .map((rewrite, index) => `${index + 1}. [${rewrite.label}] ${rewrite.text}`)
+          .join("\n")}`
       );
+
+      const retrievalRuns: Array<RetrievalResult> = [];
+      primaryResult = null;
+
+      for (const [index, rewrite] of activeQueryRewrites.entries()) {
+        retrievingStatus.setState({
+          status: "loading",
+          text: `Retrieving citations (${index + 1}/${activeQueryRewrites.length}) using ${embeddingModel.identifier}${attempt > 0 ? `, corrective pass ${attempt}` : ""}...`,
+        });
+
+        const retrievalOptions: any = {
+          embeddingModel: embeddingModel,
+          limit: maxCandidatesBeforeRerank,
+          signal: ctl.abortSignal,
+        };
+
+        if (attempt === 0 && index === 0) {
+          retrievalOptions.onFileProcessList = (filesToProcess: Array<FileHandle>) => {
+            for (const file of filesToProcess) {
+              statusSteps.set(
+                file,
+                retrievingStatus.addSubStatus({
+                  status: "waiting",
+                  text: `Process ${file.name} for retrieval`,
+                })
+              );
+            }
+          };
+          retrievalOptions.onFileProcessingStart = (file: FileHandle) => {
+            statusSteps.get(file)!.setState({
+              status: "loading",
+              text: `Processing ${file.name} for retrieval`,
+            });
+          };
+          retrievalOptions.onFileProcessingEnd = (file: FileHandle) => {
+            statusSteps.get(file)!.setState({
+              status: "done",
+              text: `Processed ${file.name} for retrieval`,
+            });
+          };
+          retrievalOptions.onFileProcessingStepProgress = (
+            file: FileHandle,
+            step: string,
+            progressInStep: number
+          ) => {
+            const verb =
+              step === "loading"
+                ? "Loading"
+                : step === "chunking"
+                ? "Chunking"
+                : "Embedding";
+            statusSteps.get(file)!.setState({
+              status: "loading",
+              text: `${verb} ${file.name} for retrieval (${(
+                progressInStep * 100
+              ).toFixed(1)}%)`,
+            });
+          };
+        }
+
+        const retrievalRun = await ctl.client.files.retrieve(
+          rewrite.text,
+          files,
+          retrievalOptions
+        );
+        retrievalRuns.push(retrievalRun);
+        if (index === 0) {
+          primaryResult = retrievalRun;
+        }
+      }
+
+      const fusedEntries = toRetrievalResultEntries(
+        fuseRagCandidates(
+          retrievalRuns.map((run) => toRagCandidates(run.entries)),
+          fusionMethod,
+          maxCandidatesBeforeRerank
+        )
+      );
+
+      candidateEntries = fusedEntries;
+      if (hybridEnabled && parsedDocuments) {
+        retrievingStatus.setState({
+          status: "loading",
+          text: `Scoring local lexical candidates across attached files...`,
+        });
+        const lexicalEntries = lexicalRetrieve(
+          originalUserPrompt,
+          parsedDocuments,
+          hybridCandidateCount
+        );
+        candidateEntries = toRetrievalResultEntries(
+          mergeHybridRagCandidates(toRagCandidates(fusedEntries), toRagCandidates(lexicalEntries), {
+            semanticWeight,
+            lexicalWeight,
+            maxCandidates: hybridCandidateCount,
+          })
+        );
+        ctl.debug(
+          `Hybrid retrieval merged ${fusedEntries.length} semantic candidates with ${lexicalEntries.length} lexical candidates into ${candidateEntries.length} hybrid candidates.`
+        );
+      }
+
+      result = primaryResult ?? { entries: [] };
+      const filteredEntries = candidateEntries.filter(
+        (entry) => entry.score > retrievalAffinityThreshold || hybridEnabled
+      ) as Array<RetrievalResultEntry>;
+
+      lastAssessment = assessCorrectiveNeed(originalUserPrompt, filteredEntries, {
+        minAverageScore: correctiveMinEvidenceScore,
+        minAspectCoverage: correctiveMinAspectCoverage,
+        minEntryCount: Math.min(2, Math.max(1, retrievalLimit)),
+      });
+
+      if (
+        !correctiveRetrievalEnabled ||
+        attempt >= correctiveMaxAttempts ||
+        !lastAssessment.shouldRetry
+      ) {
+        candidateEntries = filteredEntries;
+        break;
+      }
+
+      const correctivePlan = buildCorrectiveQueryPlan(
+        originalUserPrompt,
+        Math.max(multiQueryCount, 4)
+      );
+      const correctiveSignature = correctivePlan.rewrites
+        .map((rewrite) => rewrite.text.toLowerCase())
+        .join("||");
+      const activeSignature = activeQueryRewrites
+        .map((rewrite) => rewrite.text.toLowerCase())
+        .join("||");
+
+      ctl.debug(
+        `Corrective retrieval triggered after attempt ${attempt + 1}: ${lastAssessment.reasons.join(" ")}`
+      );
+
+      if (correctiveSignature === activeSignature) {
+        candidateEntries = filteredEntries;
+        break;
+      }
+
+      activeQueryRewrites = correctivePlan.rewrites;
     }
 
-    const result = primaryResult ?? { entries: [] };
-    const filteredEntries = candidateEntries.filter(
-      (entry) => entry.score > retrievalAffinityThreshold || hybridEnabled
-    ) as Array<RetrievalResultEntry>;
     const heuristicRankedEntries = rerankEnabled
-      ? rerankRetrievalEntries(originalUserPrompt, filteredEntries, {
+      ? rerankRagCandidates(originalUserPrompt, toRagCandidates(candidateEntries), {
           topK: rerankTopK,
           strategy: rerankStrategy,
-        })
-      : filteredEntries.slice(0, rerankTopK).map((entry) => ({
+        }).map((rankedCandidate) => ({
+          entry: toRetrievalResultEntries([rankedCandidate.candidate])[0]!,
+          originalScore: rankedCandidate.originalScore,
+          rerankScore: rankedCandidate.rerankScore,
+          features: rankedCandidate.features,
+        }))
+      : candidateEntries.slice(0, rerankTopK).map((entry) => ({
           entry,
           originalScore: entry.score,
           rerankScore: entry.score,
@@ -394,11 +472,19 @@ async function prepareRetrievalResultsContextInjection(
       ...rankedEntry.entry,
       score: rankedEntry.rerankScore,
     }));
-    result.entries = dedupeEvidenceEntries(
-      rerankedEntries,
-      dedupeSimilarityThreshold,
-      maxEvidenceBlocks
+    result.entries = toRetrievalResultEntries(
+      dedupeRagCandidates(
+        toRagCandidates(rerankedEntries),
+        dedupeSimilarityThreshold,
+        maxEvidenceBlocks
+      )
     );
+
+    if (lastAssessment) {
+      ctl.debug(
+        `Corrective retrieval assessment: retry=${lastAssessment.shouldRetry}, coverage=${lastAssessment.matchedAspectCount}/${lastAssessment.totalAspectCount}, avgScore=${lastAssessment.averageScore.toFixed(2)}, kept=${lastAssessment.entryCount}`
+      );
+    }
 
     if (rerankEnabled && rankedEntries.length > 0) {
       ctl.debug(
@@ -425,7 +511,7 @@ async function prepareRetrievalResultsContextInjection(
       });
 
       const evidenceBlocks = sanitizeEvidenceBlocks(
-        buildEvidenceBlocks(result.entries),
+        toEvidenceBlocks(buildRagEvidenceBlocks(toRagCandidates(result.entries))),
         {
           sanitizeRetrievedText: sanitizeRetrievedTextEnabled,
           stripInstructionalSpans,

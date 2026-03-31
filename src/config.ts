@@ -346,4 +346,53 @@ export const configSchematics = createConfigSchematics()
     },
     "warn-on-weak-evidence"
   )
+  .field(
+    "correctiveRetrievalEnabled",
+    "boolean",
+    {
+      displayName: "Corrective Retrieval",
+      subtitle:
+        "Retry retrieval with aspect-focused rewrites when the first evidence set looks weak or incomplete.",
+    },
+    true
+  )
+  .field(
+    "correctiveMaxAttempts",
+    "numeric",
+    {
+      int: true,
+      min: 0,
+      max: 2,
+      displayName: "Corrective Attempts",
+      subtitle: "Maximum number of corrective retrieval retries after the initial pass.",
+      slider: { min: 0, max: 2, step: 1 },
+    },
+    1
+  )
+  .field(
+    "correctiveMinEvidenceScore",
+    "numeric",
+    {
+      min: 0.0,
+      max: 1.0,
+      displayName: "Corrective Min Evidence Score",
+      subtitle:
+        "Trigger a corrective retry when the average retained evidence score falls below this threshold.",
+      slider: { min: 0.0, max: 1.0, step: 0.01 },
+    },
+    0.6
+  )
+  .field(
+    "correctiveMinAspectCoverage",
+    "numeric",
+    {
+      min: 0.0,
+      max: 1.0,
+      displayName: "Corrective Min Aspect Coverage",
+      subtitle:
+        "Trigger a corrective retry when retrieved evidence appears to cover too little of a multi-part query.",
+      slider: { min: 0.0, max: 1.0, step: 0.05 },
+    },
+    0.6
+  )
   .build();
