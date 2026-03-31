@@ -169,7 +169,9 @@ A ready-to-copy example is included at:
 examples/lmstudio.mcp.json
 ```
 
-Example:
+Examples:
+
+#### Windows clone / Windows-native launch
 
 ```json
 {
@@ -177,13 +179,36 @@ Example:
     "rag-v2-local": {
       "command": "npm",
       "args": ["run", "mcp:stdio"],
-      "cwd": "/absolute/path/to/rag-v2"
+      "cwd": "C:\\Users\\user\\projects\\rag-v2"
     }
   }
 }
 ```
 
-Replace the `cwd` value with the absolute path to this repository before adding it to your LM Studio `mcp.json`.
+Use this when LM Studio is running on Windows and you have a Windows-side clone of the repo.
+
+#### WSL launch through `wsl.exe`
+
+```json
+{
+  "mcpServers": {
+    "rag-v2-local": {
+      "command": "wsl.exe",
+      "args": [
+        "-d",
+        "Ubuntu-24.04-D",
+        "bash",
+        "-lc",
+        "cd /home/user/projects/temp/ai-apps/rag-v2 && npm run mcp:stdio"
+      ]
+    }
+  }
+}
+```
+
+Use this when your working repo lives in WSL and you want LM Studio on Windows to launch the Linux-side server through `wsl.exe`.
+
+Replace the path values with the ones for your machine before adding either example to your LM Studio `mcp.json`.
 
 ### MCP host notes
 The MCP path is currently best suited for local hosts that can launch stdio servers with a working directory, such as LM Studio and other local MCP-compatible desktop clients.
