@@ -15,6 +15,13 @@ const INSTRUCTIONAL_PATTERNS = [
   /\brespond with only\b/gi,
 ];
 
+export function containsInstructionLikeText(value: string) {
+  return INSTRUCTIONAL_PATTERNS.some((pattern) => {
+    pattern.lastIndex = 0;
+    return pattern.test(value);
+  });
+}
+
 function normalizeWhitespace(value: string) {
   return value
     .replace(/\r\n/g, "\n")
