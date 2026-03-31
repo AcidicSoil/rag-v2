@@ -129,19 +129,36 @@ Most of the retrieval-quality logic is now centralized in `packages/adapter-lmst
 
 ## Getting started
 
-### Development
-Run the plugin in dev mode:
+### Two supported integration modes
+This repo intentionally supports two ways to use the same RAG logic:
+
+1. **LM Studio plugin mode**: prompt-preprocessor integration loaded by LM Studio as a plugin
+2. **MCP server mode**: SDK-backed stdio server for LM Studio MCP or other local MCP-compatible hosts
+
+Both modes share the workspace packages under `packages/`, but they have different entry surfaces:
+
+- plugin mode keeps a minimal root `src/index.ts` shim because LM Studio expects the plugin root at the repo root
+- MCP mode runs directly from `packages/mcp-server/src/stdioServer.ts`
+
+### Plugin development
+Run the LM Studio plugin in dev mode:
 
 ```bash
-lms dev
+npm run dev:plugin
 ```
 
-This should start the plugin watcher and register the prompt preprocessor with LM Studio.
+This starts the plugin watcher and registers the prompt preprocessor with LM Studio.
+
+Publish or update the plugin on LM Studio Hub with:
+
+```bash
+npm run push:plugin
+```
 
 ### MCP server (stdio)
-The repository now also includes an SDK-backed MCP stdio server entrypoint for local MCP hosts.
+The repository also includes an SDK-backed MCP stdio server entrypoint for local MCP hosts.
 
-Run it directly with:
+Run it with:
 
 ```bash
 npm run mcp:stdio
@@ -219,11 +236,23 @@ The current MCP runtime supports three corpus-input styles:
 - filesystem `paths`
 - pre-supplied `chunks`
 
+### Package-focused validation
+You can validate the workspace in layers:
+
+```bash
+npm run typecheck:core
+npm run typecheck:adapter
+npm run typecheck:mcp
+npm run typecheck
+```
+
+The first three commands validate each package independently. The final `npm run typecheck` command runs the package checks plus the root plugin shim check.
+
 ### Publishing
 Publish or update the plugin on LM Studio Hub:
 
 ```bash
-lms push
+npm run push:plugin
 ```
 
 ## Validation and testing
@@ -324,7 +353,7 @@ The plugin can be configured from the LM Studio UI.
 - `packages/core/src/`: transport-agnostic retrieval and policy helpers
 - `packages/adapter-lmstudio/src/`: LM Studio adapter entrypoints, prompt preprocessor flow, and adapter-local types
 - `packages/mcp-server/src/`: MCP contracts, handlers, runtimes, and stdio server entrypoints
-- `src/`, `src/types/`, and `src/mcp/`: temporary compatibility re-export shims during the workspace migration
+- `src/index.ts`: intentional LM Studio plugin-root entry shim that forwards to `packages/adapter-lmstudio/src/index.ts`
 - `scripts/`: smoke tests and eval runner
 - `eval/cases/`: regression case suites
 - `manual-tests/`: live-test fixtures and guidance

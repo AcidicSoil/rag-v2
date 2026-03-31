@@ -8,8 +8,10 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "lms dev",
-    "push": "lms push",
+    "dev": "npm run dev:plugin",
+    "dev:plugin": "lms dev",
+    "push": "npm run push:plugin",
+    "push:plugin": "lms push",
     "smoke:multi-query": "npx -y tsx scripts/smoke-multi-query.ts",
     "smoke:evidence": "npx -y tsx scripts/smoke-evidence.ts",
     "smoke:safety": "npx -y tsx scripts/smoke-safety.ts",
@@ -23,8 +25,12 @@
     "smoke:model-rerank": "npx -y tsx scripts/smoke-model-rerank.ts",
     "stress:model-rerank": "npx -y tsx scripts/stress-model-rerank.ts",
     "eval": "npx -y tsx scripts/eval.ts",
-    "mcp:stdio": "npx -y tsx packages/mcp-server/src/stdioServer.ts",
-    "typecheck": "npx -y -p typescript tsc --noEmit"
+    "mcp:stdio": "npm run stdio --workspace @rag-v2/mcp-server",
+    "typecheck": "npm run typecheck:packages && npx -y -p typescript tsc --noEmit",
+    "typecheck:packages": "npm run typecheck:core && npm run typecheck:adapter && npm run typecheck:mcp",
+    "typecheck:core": "npm run typecheck --workspace @rag-v2/core",
+    "typecheck:adapter": "npm run typecheck --workspace @rag-v2/adapter-lmstudio",
+    "typecheck:mcp": "npm run typecheck --workspace @rag-v2/mcp-server"
   },
   "author": "AcidicSoil",
   "license": "ISC",
