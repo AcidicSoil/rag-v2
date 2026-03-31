@@ -3,8 +3,8 @@ import {
   applyModelRerankScores,
   buildModelRerankPrompt,
   parseModelRerankResponse,
-} from "../src/modelRerank";
-import { rerankRetrievalEntries } from "../src/rerank";
+} from "../packages/adapter-lmstudio/src/modelRerank";
+import { rerankRetrievalEntries } from "../packages/adapter-lmstudio/src/rerank";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) {

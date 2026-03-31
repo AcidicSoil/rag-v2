@@ -1,0 +1,10 @@
+{
+  "name": "@rag-v2/adapter-lmstudio",
+  "version": "1.0.0",
+  "private": true,
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "dependencies": {
+    "@rag-v2/core": "1.0.0"
+  }
+}

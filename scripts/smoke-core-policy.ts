@@ -2,18 +2,18 @@ import {
   buildCoreAmbiguousGateMessage,
   buildCoreLikelyUnanswerableGateMessage,
   runCoreAnswerabilityGate,
-} from "../src/core/gating";
+} from "../packages/core/src/gating";
 import {
   assessCoreCorrectiveNeed,
   buildCoreCorrectiveQueryPlan,
-} from "../src/core/corrective";
-import { generateCoreQueryRewrites } from "../src/core/rewrite";
+} from "../packages/core/src/corrective";
+import { generateCoreQueryRewrites } from "../packages/core/src/rewrite";
 import {
   buildCoreGroundingInstruction,
   sanitizeCoreRetrievedText,
-} from "../src/core/safety";
-import { ragAnswerInputSchema, rerankOnlyInputSchema } from "../src/mcp/contracts";
-import type { RagCandidate } from "../src/core/contracts";
+} from "../packages/core/src/safety";
+import { ragAnswerInputSchema, rerankOnlyInputSchema } from "../packages/mcp-server/src/contracts";
+import type { RagCandidate } from "../packages/core/src/contracts";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) {

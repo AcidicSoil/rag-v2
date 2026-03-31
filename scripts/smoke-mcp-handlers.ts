@@ -1,5 +1,5 @@
-import { createDefaultMcpRuntime } from "../src/mcp/defaultRuntime";
-import { createMcpToolHandlers } from "../src/mcp/handlers";
+import { createDefaultMcpRuntime } from "../packages/mcp-server/src/defaultRuntime";
+import { createMcpToolHandlers } from "../packages/mcp-server/src/handlers";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) {

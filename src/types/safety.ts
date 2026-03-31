@@ -1,6 +1,1 @@
-export type StrictGroundingMode = "off" | "warn-on-weak-evidence" | "require-evidence";
-
-export interface SafetySanitizationOptions {
-  sanitizeRetrievedText: boolean;
-  stripInstructionalSpans: boolean;
-}
+export * from "../../packages/adapter-lmstudio/src/types/safety";

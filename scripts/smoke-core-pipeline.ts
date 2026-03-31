@@ -4,12 +4,12 @@ import {
   fuseRagCandidates,
   mergeHybridRagCandidates,
   rerankRagCandidates,
-} from "../src/core/retrievalPipeline";
+} from "../packages/core/src/retrievalPipeline";
 import {
   toEvidenceBlocks,
   toRetrievalResultEntries,
-} from "../src/lmstudioCoreBridge";
-import type { RagCandidate } from "../src/core/contracts";
+} from "../packages/adapter-lmstudio/src/lmstudioCoreBridge";
+import type { RagCandidate } from "../packages/core/src/contracts";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) {

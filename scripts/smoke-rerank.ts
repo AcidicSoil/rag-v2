@@ -1,5 +1,5 @@
 import type { RetrievalResultEntry } from "@lmstudio/sdk";
-import { rerankRetrievalEntries } from "../src/rerank";
+import { rerankRetrievalEntries } from "../packages/adapter-lmstudio/src/rerank";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) {

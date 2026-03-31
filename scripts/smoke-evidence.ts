@@ -1,4 +1,4 @@
-import { buildEvidenceBlocks, dedupeEvidenceEntries, formatEvidenceBlocks } from "../src/evidence";
+import { buildEvidenceBlocks, dedupeEvidenceEntries, formatEvidenceBlocks } from "../packages/adapter-lmstudio/src/evidence";
 import type { RetrievalResultEntry } from "@lmstudio/sdk";
 
 function assert(condition: unknown, message: string): asserts condition {

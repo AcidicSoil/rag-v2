@@ -1,7 +1,7 @@
 import {
   buildGroundingInstruction,
   sanitizeRetrievedText,
-} from "../src/safety";
+} from "../packages/adapter-lmstudio/src/safety";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) {

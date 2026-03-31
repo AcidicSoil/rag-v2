@@ -2,7 +2,7 @@ import type { FileHandle, RetrievalResultEntry } from "@lmstudio/sdk";
 import {
   assessCorrectiveNeed,
   buildCorrectiveQueryPlan,
-} from "../src/corrective";
+} from "../packages/adapter-lmstudio/src/corrective";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) {

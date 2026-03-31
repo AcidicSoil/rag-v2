@@ -11,6 +11,19 @@ The plan is intentionally staged:
 
 ## Active execution task list
 
+### Workspace migration tranche
+- [x] Review the saved handoff notes, current repo layout, and existing implementation plan.
+- [x] Research current npm workspace and TypeScript project-reference guidance before changing repo structure.
+- [x] Identify package-boundary blockers in the current codebase.
+- [x] Decouple `core` runtime contracts from MCP-specific schema types.
+- [x] Create the root npm workspace configuration and package skeletons for `packages/core`, `packages/adapter-lmstudio`, and `packages/mcp-server`.
+- [x] Move transport-agnostic core sources into `packages/core` while preserving compatibility through temporary re-export shims.
+- [x] Move LM Studio adapter-specific sources into `packages/adapter-lmstudio` behind stable entrypoints.
+- [x] Move MCP server-specific sources into `packages/mcp-server` behind stable entrypoints.
+- [x] Update scripts and TypeScript config for the workspace layout.
+- [x] Update docs for the workspace layout.
+- [x] Re-run smoke tests and type-check for the migrated layout.
+
 ### MCP extraction tranche
 - [x] Review the MCP-oriented architecture note and current repo state.
 - [x] Confirm the live integration constraints: LM Studio prompt preprocessors/tools providers are plugin hooks, while MCP uses separate servers and transports.

@@ -1,1 +1,27 @@
-{"compilerOptions":{"strict":true,"module":"CommonJS","target":"ES2021","declaration":true,"noImplicitOverride":true,"sourceMap":true,"declarationMap":true,"esModuleInterop":true,"skipLibCheck":true,"rootDir":"src","outDir":"dist","types":["node"]},"include":["src/**/*.ts"],"exclude":["scripts","manual-tests","dist","node_modules"]}
+{
+  "compilerOptions": {
+    "strict": true,
+    "module": "CommonJS",
+    "target": "ES2021",
+    "declaration": true,
+    "noImplicitOverride": true,
+    "sourceMap": true,
+    "declarationMap": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "rootDir": ".",
+    "outDir": "dist",
+    "types": ["node"]
+  },
+  "include": [
+    "src/**/*.ts",
+    "packages/**/*.ts"
+  ],
+  "exclude": [
+    "scripts",
+    "manual-tests",
+    "dist",
+    "node_modules",
+    "packages/*/dist"
+  ]
+}

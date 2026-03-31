@@ -1,9 +1,1 @@
-import type { RetrievalResultEntry } from "@lmstudio/sdk";
-
-export interface EvidenceBlock {
-  label: string;
-  fileName: string;
-  content: string;
-  score: number;
-  entry: RetrievalResultEntry;
-}
+export * from "../../packages/adapter-lmstudio/src/types/evidence";

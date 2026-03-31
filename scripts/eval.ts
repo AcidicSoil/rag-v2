@@ -1,17 +1,17 @@
 import { readFileSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { RetrievalResultEntry } from "@lmstudio/sdk";
-import { dedupeEvidenceEntries } from "../src/evidence";
-import { runAnswerabilityGate } from "../src/gating";
-import { buildEvalMetrics } from "../src/metrics";
-import { generateQueryRewrites } from "../src/queryRewrite";
-import { mergeHybridCandidates } from "../src/hybridRetrieve";
-import { lexicalRetrieve } from "../src/lexicalRetrieve";
-import { rerankRetrievalEntries } from "../src/rerank";
-import { buildGroundingInstruction, sanitizeRetrievedText } from "../src/safety";
-import type { EvalCase } from "../src/types/eval";
-import type { RerankStrategy } from "../src/types/rerank";
-import type { StrictGroundingMode } from "../src/types/safety";
+import { dedupeEvidenceEntries } from "../packages/adapter-lmstudio/src/evidence";
+import { runAnswerabilityGate } from "../packages/adapter-lmstudio/src/gating";
+import { buildEvalMetrics } from "../packages/adapter-lmstudio/src/metrics";
+import { generateQueryRewrites } from "../packages/adapter-lmstudio/src/queryRewrite";
+import { mergeHybridCandidates } from "../packages/adapter-lmstudio/src/hybridRetrieve";
+import { lexicalRetrieve } from "../packages/adapter-lmstudio/src/lexicalRetrieve";
+import { rerankRetrievalEntries } from "../packages/adapter-lmstudio/src/rerank";
+import { buildGroundingInstruction, sanitizeRetrievedText } from "../packages/adapter-lmstudio/src/safety";
+import type { EvalCase } from "../packages/adapter-lmstudio/src/types/eval";
+import type { RerankStrategy } from "../packages/adapter-lmstudio/src/types/rerank";
+import type { StrictGroundingMode } from "../packages/adapter-lmstudio/src/types/safety";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) {

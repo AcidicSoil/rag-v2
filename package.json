@@ -1,1 +1,40 @@
-{"name":"lms-plugin-rag-v2","version":"1.0.0","description":"A Retrieval-Augmented Generation (RAG) plugin for LM Studio. This plugin enhances your local LLM with the ability to answer questions based on the content of provided documents.","main":"index.js","scripts":{"dev":"lms dev","push":"lms push","smoke:multi-query":"npx -y tsx scripts/smoke-multi-query.ts","smoke:evidence":"npx -y tsx scripts/smoke-evidence.ts","smoke:safety":"npx -y tsx scripts/smoke-safety.ts","smoke:rerank":"npx -y tsx scripts/smoke-rerank.ts","smoke:hybrid":"npx -y tsx scripts/smoke-hybrid.ts","smoke:corrective":"npx -y tsx scripts/smoke-corrective.ts","smoke:core":"npx -y tsx scripts/smoke-core-pipeline.ts","smoke:core-policy":"npx -y tsx scripts/smoke-core-policy.ts","smoke:mcp":"npx -y tsx scripts/smoke-mcp-handlers.ts","smoke:mcp-filesystem":"npx -y tsx scripts/smoke-mcp-filesystem.ts","smoke:model-rerank":"npx -y tsx scripts/smoke-model-rerank.ts","stress:model-rerank":"npx -y tsx scripts/stress-model-rerank.ts","eval":"npx -y tsx scripts/eval.ts","mcp:stdio":"npx -y tsx src/mcp/stdioServer.ts"},"author":"AcidicSoil","license":"ISC","dependencies":{"@lmstudio/sdk":"1.4.0","@modelcontextprotocol/sdk":"^1.29.0","zod":"3.24.1"},"devDependencies":{"@types/node":"^20.19.25","codefetch":"^2.1.2"}}
+{
+  "name": "lms-plugin-rag-v2",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A Retrieval-Augmented Generation (RAG) plugin for LM Studio. This plugin enhances your local LLM with the ability to answer questions based on the content of provided documents.",
+  "main": "index.js",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "lms dev",
+    "push": "lms push",
+    "smoke:multi-query": "npx -y tsx scripts/smoke-multi-query.ts",
+    "smoke:evidence": "npx -y tsx scripts/smoke-evidence.ts",
+    "smoke:safety": "npx -y tsx scripts/smoke-safety.ts",
+    "smoke:rerank": "npx -y tsx scripts/smoke-rerank.ts",
+    "smoke:hybrid": "npx -y tsx scripts/smoke-hybrid.ts",
+    "smoke:corrective": "npx -y tsx scripts/smoke-corrective.ts",
+    "smoke:core": "npx -y tsx scripts/smoke-core-pipeline.ts",
+    "smoke:core-policy": "npx -y tsx scripts/smoke-core-policy.ts",
+    "smoke:mcp": "npx -y tsx scripts/smoke-mcp-handlers.ts",
+    "smoke:mcp-filesystem": "npx -y tsx scripts/smoke-mcp-filesystem.ts",
+    "smoke:model-rerank": "npx -y tsx scripts/smoke-model-rerank.ts",
+    "stress:model-rerank": "npx -y tsx scripts/stress-model-rerank.ts",
+    "eval": "npx -y tsx scripts/eval.ts",
+    "mcp:stdio": "npx -y tsx packages/mcp-server/src/stdioServer.ts",
+    "typecheck": "npx -y -p typescript tsc --noEmit"
+  },
+  "author": "AcidicSoil",
+  "license": "ISC",
+  "dependencies": {
+    "@lmstudio/sdk": "1.4.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.25",
+    "codefetch": "^2.1.2"
+  }
+}

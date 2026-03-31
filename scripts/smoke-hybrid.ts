@@ -1,6 +1,6 @@
 import type { FileHandle, RetrievalResultEntry } from "@lmstudio/sdk";
-import { mergeHybridCandidates } from "../src/hybridRetrieve";
-import { lexicalRetrieve } from "../src/lexicalRetrieve";
+import { mergeHybridCandidates } from "../packages/adapter-lmstudio/src/hybridRetrieve";
+import { lexicalRetrieve } from "../packages/adapter-lmstudio/src/lexicalRetrieve";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) {

@@ -1,5 +1,5 @@
-import { fuseRetrievalEntries } from "../src/fusion";
-import { generateQueryRewrites } from "../src/queryRewrite";
+import { fuseRetrievalEntries } from "../packages/adapter-lmstudio/src/fusion";
+import { generateQueryRewrites } from "../packages/adapter-lmstudio/src/queryRewrite";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) {

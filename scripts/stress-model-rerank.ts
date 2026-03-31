@@ -4,9 +4,9 @@ import {
   buildModelRerankPrompt,
   parseModelRerankResponse,
   performModelAssistedRerank,
-} from "../src/modelRerank";
-import { rerankRetrievalEntries } from "../src/rerank";
-import type { RankedRetrievalEntry } from "../src/types/rerank";
+} from "../packages/adapter-lmstudio/src/modelRerank";
+import { rerankRetrievalEntries } from "../packages/adapter-lmstudio/src/rerank";
+import type { RankedRetrievalEntry } from "../packages/adapter-lmstudio/src/types/rerank";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) {

@@ -125,7 +125,7 @@ At a high level, the plugin follows this flow:
 7. dedupe and sanitize evidence blocks
 8. inject grounded evidence plus the user query back into the model prompt
 
-Most of the retrieval-quality logic is centralized in `src/promptPreprocessor.ts`, with supporting modules for gating, rewriting, fusion, hybrid retrieval, reranking, evidence handling, safety, and evaluation.
+Most of the retrieval-quality logic is now centralized in `packages/adapter-lmstudio/src/promptPreprocessor.ts`, with supporting modules for gating, rewriting, fusion, hybrid retrieval, reranking, evidence handling, safety, and evaluation in the adapter package, plus shared transport-agnostic logic in `packages/core/src/`.
 
 ## Getting started
 
@@ -289,17 +289,17 @@ The plugin can be configured from the LM Studio UI.
 
 ## Repository highlights
 
-- `src/promptPreprocessor.ts`: main prompt-preprocessor pipeline
-- `src/gating.ts`: answerability and ambiguity heuristics
-- `src/queryRewrite.ts`: deterministic query rewrites
-- `src/fusion.ts`: multi-query fusion logic
-- `src/lexicalRetrieve.ts`: local lexical chunking and scoring
-- `src/hybridRetrieve.ts`: semantic-plus-lexical candidate merging
-- `src/rerank.ts`: heuristic evidence reranking
-- `src/evidence.ts`: evidence formatting and dedupe
-- `src/safety.ts`: sanitization and grounding helpers
-- `src/core/`: transport-agnostic retrieval and policy helpers
-- `src/mcp/`: MCP contracts, handlers, runtimes, and stdio server entrypoints
+- `packages/adapter-lmstudio/src/promptPreprocessor.ts`: main LM Studio prompt-preprocessor pipeline
+- `packages/adapter-lmstudio/src/gating.ts`: LM Studio-facing answerability and ambiguity heuristics
+- `packages/adapter-lmstudio/src/queryRewrite.ts`: deterministic query rewrites
+- `packages/adapter-lmstudio/src/fusion.ts`: multi-query fusion logic
+- `packages/adapter-lmstudio/src/lexicalRetrieve.ts`: local lexical chunking and scoring
+- `packages/adapter-lmstudio/src/hybridRetrieve.ts`: semantic-plus-lexical candidate merging
+- `packages/adapter-lmstudio/src/rerank.ts`: heuristic evidence reranking
+- `packages/core/src/`: transport-agnostic retrieval and policy helpers
+- `packages/adapter-lmstudio/src/`: LM Studio adapter entrypoints, prompt preprocessor flow, and adapter-local types
+- `packages/mcp-server/src/`: MCP contracts, handlers, runtimes, and stdio server entrypoints
+- `src/`, `src/types/`, and `src/mcp/`: temporary compatibility re-export shims during the workspace migration
 - `scripts/`: smoke tests and eval runner
 - `eval/cases/`: regression case suites
 - `manual-tests/`: live-test fixtures and guidance
