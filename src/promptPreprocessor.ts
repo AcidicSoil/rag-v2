@@ -18,6 +18,7 @@ import {
 import { fuseRetrievalEntries } from "./fusion";
 import { mergeHybridCandidates } from "./hybridRetrieve";
 import { lexicalRetrieve } from "./lexicalRetrieve";
+import { performModelAssistedRerank } from "./modelRerank";
 import { rerankRetrievalEntries } from "./rerank";
 import {
   buildGroundingInstruction,
@@ -146,6 +147,8 @@ async function prepareRetrievalResultsContextInjection(
   const rerankStrategy = pluginConfig.get(
     "rerankStrategy"
   ) as RerankStrategy;
+  const modelRerankTopK = pluginConfig.get("modelRerankTopK");
+  const modelRerankModelId = pluginConfig.get("modelRerankModelId");
   const dedupeSimilarityThreshold = pluginConfig.get(
     "dedupeSimilarityThreshold"
   );
@@ -337,7 +340,7 @@ async function prepareRetrievalResultsContextInjection(
     const filteredEntries = candidateEntries.filter(
       (entry) => entry.score > retrievalAffinityThreshold || hybridEnabled
     ) as Array<RetrievalResultEntry>;
-    const rankedEntries = rerankEnabled
+    const heuristicRankedEntries = rerankEnabled
       ? rerankRetrievalEntries(originalUserPrompt, filteredEntries, {
           topK: rerankTopK,
           strategy: rerankStrategy,
@@ -354,6 +357,39 @@ async function prepareRetrievalResultsContextInjection(
             diversityPenalty: 0,
           },
         }));
+
+    const rankedEntries =
+      rerankEnabled && rerankStrategy === "heuristic-then-llm"
+        ? await (async () => {
+            try {
+              const rerankModel = modelRerankModelId.trim()
+                ? await ctl.client.llm.model(modelRerankModelId.trim(), {
+                    signal: ctl.abortSignal,
+                  })
+                : await ctl.client.llm.model();
+              const modelAssisted = await performModelAssistedRerank(
+                rerankModel,
+                originalUserPrompt,
+                heuristicRankedEntries.slice(0, modelRerankTopK),
+                rerankTopK,
+                ctl.abortSignal
+              );
+              ctl.debug(
+                `Model-assisted rerank parsed ${modelAssisted.parsedScores.length} scores from response: ${modelAssisted.rawResponse}`
+              );
+              return [
+                ...modelAssisted.rerankedEntries,
+                ...heuristicRankedEntries.slice(modelRerankTopK),
+              ].slice(0, rerankTopK);
+            } catch (error) {
+              ctl.debug(
+                `Model-assisted rerank failed; falling back to heuristic rerank. ${error instanceof Error ? error.message : String(error)}`
+              );
+              return heuristicRankedEntries;
+            }
+          })()
+        : heuristicRankedEntries;
+
     const rerankedEntries = rankedEntries.map((rankedEntry) => ({
       ...rankedEntry.entry,
       score: rankedEntry.rerankScore,

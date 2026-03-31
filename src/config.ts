@@ -244,9 +244,37 @@ export const configSchematics = createConfigSchematics()
           value: "heuristic-v1",
           displayName: "Heuristic v1",
         },
+        {
+          value: "heuristic-then-llm",
+          displayName: "Heuristic then LLM",
+        },
       ],
     },
     "heuristic-v1"
+  )
+  .field(
+    "modelRerankTopK",
+    "numeric",
+    {
+      int: true,
+      min: 1,
+      max: 10,
+      displayName: "Model Rerank Top K",
+      subtitle: "Number of top heuristic candidates to rescore with an LLM when model-assisted reranking is enabled.",
+      slider: { min: 1, max: 10, step: 1 },
+    },
+    3
+  )
+  .field(
+    "modelRerankModelId",
+    "string",
+    {
+      displayName: "Model Rerank Model ID (Optional)",
+      subtitle:
+        "Optional LLM model ID to use for model-assisted reranking. Leave empty to use the active/default LM Studio chat model.",
+      placeholder: "e.g., qwen2.5-7b-instruct",
+    },
+    ""
   )
   .field(
     "dedupeSimilarityThreshold",

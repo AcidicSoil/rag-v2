@@ -12,14 +12,13 @@ The plan is intentionally staged:
 ## Active execution task list
 
 ### Immediate implementation slice
-- [x] Review the existing plan, current codebase, and prior maintenance notes.
-- [x] Confirm the next decision point from handoff: live validation first, then eval expansion or reranking.
-- [x] Break the next slice into implementation tasks that fit the current prompt-preprocessor architecture.
-- [ ] Run one focused LM Studio live validation pass of the newest retrieval-quality features.
-- [x] Start Phase 2C-lite: define a first heuristic rerank feature set.
-- [x] Wire Phase 2C-lite rerank config and scaffolding into the retrieval pipeline.
-- [x] Validate reranking with TypeScript plus targeted smoke coverage.
-- [ ] Refine rerank weights and defaults based on validation findings.
+- [x] Review the current implementation plan, repo state, and prior handoff notes.
+- [x] Research current reranking direction and confirm that learned rerankers should remain a second-stage optional path.
+- [x] Break the reranking next step into a small implementation task list that fits the prompt-preprocessor architecture.
+- [x] Add rerank strategy scaffolding for an optional model-assisted rerank stage.
+- [x] Implement a best-effort LLM-assisted rerank hook after heuristic candidate narrowing.
+- [x] Add deterministic parsing/merge tests for model-assisted reranking.
+- [x] Validate with TypeScript and targeted smoke coverage.
 
 ### Next queued tasks
 - [x] Expand eval coverage with hard, adversarial, and no-match retrieval cases.

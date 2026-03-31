@@ -44,7 +44,10 @@ export function rerankRetrievalEntries(
     return [];
   }
 
-  if (options.strategy !== "heuristic-v1") {
+  if (
+    options.strategy !== "heuristic-v1" &&
+    options.strategy !== "heuristic-then-llm"
+  ) {
     return entries.slice(0, options.topK).map((entry) => ({
       entry,
       originalScore: entry.score,
