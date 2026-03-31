@@ -1,0 +1,41 @@
+{
+  "generatedAt": "2026-03-31T05:05:09.013Z",
+  "metrics": {
+    "totalCases": 6,
+    "passedCases": 6,
+    "failedCases": 0,
+    "accuracy": 1
+  },
+  "caseResults": [
+    {
+      "id": "gate-social-1",
+      "ok": true,
+      "summary": "gate-social-1: no-retrieval-needed"
+    },
+    {
+      "id": "gate-ambiguous-1",
+      "ok": true,
+      "summary": "gate-ambiguous-1: ambiguous"
+    },
+    {
+      "id": "gate-unanswerable-1",
+      "ok": true,
+      "summary": "gate-unanswerable-1: likely-unanswerable"
+    },
+    {
+      "id": "rewrite-compound-1",
+      "ok": true,
+      "summary": "rewrite-compound-1: 4 rewrites"
+    },
+    {
+      "id": "evidence-dedupe-1",
+      "ok": true,
+      "summary": "evidence-dedupe-1: 2 deduped entries"
+    },
+    {
+      "id": "safety-sanitize-1",
+      "ok": true,
+      "summary": "safety-sanitize-1: sanitized"
+    }
+  ]
+}

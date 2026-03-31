@@ -31,6 +31,24 @@ lms push
 
 The same command can also be used to update an existing plugin.
 
+### Local validation
+
+Component-level smoke tests:
+
+```bash
+npm run smoke:multi-query
+npm run smoke:evidence
+npm run smoke:safety
+```
+
+Lightweight regression eval:
+
+```bash
+npm run eval
+```
+
+The eval runner reads cases from `eval/cases/basic.jsonl` and writes the latest results to `eval/results/basic-latest.json`.
+
 ## Configuration
 
 You can configure the plugin from the LM Studio UI. Here are the available options:
