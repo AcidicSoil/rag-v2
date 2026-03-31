@@ -26,11 +26,14 @@ The plan is intentionally staged:
 - [ ] Only after that, scaffold the MCP server package and first tool handlers.
 
 ### Working task list after this slice
-- [ ] Add `src/core/pipeline.ts`-level eval cases independent of LM Studio runtime objects.
-- [ ] Move gating, rewrite, corrective assessment, and safety behind the same core contract boundary.
-- [ ] Introduce explicit adapter folders (`adapter-lmstudio`, later `mcp-server`) once the in-repo extraction stabilizes.
-- [ ] Define `rag_answer`, `rag_search`, `corpus_inspect`, and `rerank_only` request/response schemas.
-- [ ] Add a stdio-first MCP scaffold after the extraction boundary is validated.
+- [x] Add `src/core/pipeline.ts`-level eval cases independent of LM Studio runtime objects.
+- [x] Move gating, rewrite, corrective assessment, and safety behind the same core contract boundary.
+- [x] Introduce explicit MCP request/response schemas.
+- [x] Add adapter-specific retrieval and document-loading runtime interfaces.
+- [x] Scaffold a minimal stdio MCP server entrypoint and tool handler layer using the new schemas.
+- [ ] Replace the current stub MCP runtime with real filesystem loading and shared retrieval adapters.
+- [ ] Decide whether the first real MCP transport should stay hand-rolled JSON-RPC or switch to the official MCP TypeScript SDK once the runtime shape stabilizes.
+- [ ] Add `packages/` workspace split only after the runtime boundary stops moving.
 
 ---
 
