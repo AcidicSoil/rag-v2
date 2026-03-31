@@ -31,7 +31,7 @@ The plan is intentionally staged:
 - [x] Introduce explicit MCP request/response schemas.
 - [x] Add adapter-specific retrieval and document-loading runtime interfaces.
 - [x] Scaffold a minimal stdio MCP server entrypoint and tool handler layer using the new schemas.
-- [ ] Replace the current stub MCP runtime with real filesystem loading and shared retrieval adapters.
+- [x] Replace the current stub MCP runtime with real filesystem loading and shared lexical retrieval adapters.
 - [ ] Decide whether the first real MCP transport should stay hand-rolled JSON-RPC or switch to the official MCP TypeScript SDK once the runtime shape stabilizes.
 - [ ] Add `packages/` workspace split only after the runtime boundary stops moving.
 
