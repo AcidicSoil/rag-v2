@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "rag-v2-local": {
+      "command": "npm",
+      "args": ["run", "mcp:stdio"],
+      "cwd": "/absolute/path/to/rag-v2"
+    }
+  }
+}

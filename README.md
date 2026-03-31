@@ -138,6 +138,62 @@ lms dev
 
 This should start the plugin watcher and register the prompt preprocessor with LM Studio.
 
+### MCP server (stdio)
+The repository now also includes an SDK-backed MCP stdio server entrypoint for local MCP hosts.
+
+Run it directly with:
+
+```bash
+npm run mcp:stdio
+```
+
+This starts the MCP server over stdio and exposes four tools:
+
+- `rag_answer`
+- `rag_search`
+- `corpus_inspect`
+- `rerank_only`
+
+Important:
+
+- do not print to stdout from the MCP server path outside the protocol itself
+- use stderr for logs and debugging output
+- the current MCP runtime supports inline documents, pre-chunked candidates, and real filesystem `paths`
+
+### LM Studio `mcp.json` example
+LM Studio supports local MCP servers through `mcp.json` using Cursor-style notation.
+
+A ready-to-copy example is included at:
+
+```text
+examples/lmstudio.mcp.json
+```
+
+Example:
+
+```json
+{
+  "mcpServers": {
+    "rag-v2-local": {
+      "command": "npm",
+      "args": ["run", "mcp:stdio"],
+      "cwd": "/absolute/path/to/rag-v2"
+    }
+  }
+}
+```
+
+Replace the `cwd` value with the absolute path to this repository before adding it to your LM Studio `mcp.json`.
+
+### MCP host notes
+The MCP path is currently best suited for local hosts that can launch stdio servers with a working directory, such as LM Studio and other local MCP-compatible desktop clients.
+
+The current MCP runtime supports three corpus-input styles:
+
+- inline `documents`
+- filesystem `paths`
+- pre-supplied `chunks`
+
 ### Publishing
 Publish or update the plugin on LM Studio Hub:
 
@@ -156,6 +212,10 @@ npm run smoke:evidence
 npm run smoke:safety
 npm run smoke:rerank
 npm run smoke:hybrid
+npm run smoke:core
+npm run smoke:core-policy
+npm run smoke:mcp
+npm run smoke:mcp-filesystem
 ```
 
 These are intended to quickly verify deterministic logic in isolation.
@@ -238,9 +298,12 @@ The plugin can be configured from the LM Studio UI.
 - `src/rerank.ts`: heuristic evidence reranking
 - `src/evidence.ts`: evidence formatting and dedupe
 - `src/safety.ts`: sanitization and grounding helpers
+- `src/core/`: transport-agnostic retrieval and policy helpers
+- `src/mcp/`: MCP contracts, handlers, runtimes, and stdio server entrypoints
 - `scripts/`: smoke tests and eval runner
 - `eval/cases/`: regression case suites
 - `manual-tests/`: live-test fixtures and guidance
+- `examples/lmstudio.mcp.json`: local MCP host config example
 
 ## Current status
 
@@ -254,6 +317,8 @@ The repository currently includes:
 - safer retrieved-text handling
 - smoke tests for major retrieval-quality components
 - multi-suite regression eval coverage
+- an SDK-backed MCP stdio server path with local filesystem loading
+- LM Studio-compatible `mcp.json` example configuration
 
 A focused LM Studio live-validation pass is still the best way to tune defaults and confirm end-to-end behavior against real attached files.
 
