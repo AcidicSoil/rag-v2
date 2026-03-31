@@ -16,6 +16,8 @@ import {
   formatEvidenceBlocks,
 } from "./evidence";
 import { fuseRetrievalEntries } from "./fusion";
+import { mergeHybridCandidates } from "./hybridRetrieve";
+import { lexicalRetrieve } from "./lexicalRetrieve";
 import { rerankRetrievalEntries } from "./rerank";
 import {
   buildGroundingInstruction,
@@ -135,6 +137,10 @@ async function prepareRetrievalResultsContextInjection(
   const maxCandidatesBeforeRerank = pluginConfig.get(
     "maxCandidatesBeforeRerank"
   );
+  const hybridEnabled = pluginConfig.get("hybridEnabled");
+  const lexicalWeight = pluginConfig.get("lexicalWeight");
+  const semanticWeight = pluginConfig.get("semanticWeight");
+  const hybridCandidateCount = pluginConfig.get("hybridCandidateCount");
   const rerankEnabled = pluginConfig.get("rerankEnabled");
   const rerankTopK = pluginConfig.get("rerankTopK");
   const rerankStrategy = pluginConfig.get(
@@ -295,9 +301,41 @@ async function prepareRetrievalResultsContextInjection(
       maxCandidatesBeforeRerank
     );
 
+    let candidateEntries = fusedEntries;
+    if (hybridEnabled) {
+      retrievingStatus.setState({
+        status: "loading",
+        text: `Scoring local lexical candidates across attached files...`,
+      });
+      const parsedDocuments = await Promise.all(
+        files.map(async (file) => {
+          const parsed = await ctl.client.files.parseDocument(file, {
+            signal: ctl.abortSignal,
+          });
+          return {
+            file,
+            content: parsed.content,
+          };
+        })
+      );
+      const lexicalEntries = lexicalRetrieve(
+        originalUserPrompt,
+        parsedDocuments,
+        hybridCandidateCount
+      );
+      candidateEntries = mergeHybridCandidates(fusedEntries, lexicalEntries, {
+        semanticWeight,
+        lexicalWeight,
+        maxCandidates: hybridCandidateCount,
+      });
+      ctl.debug(
+        `Hybrid retrieval merged ${fusedEntries.length} semantic candidates with ${lexicalEntries.length} lexical candidates into ${candidateEntries.length} hybrid candidates.`
+      );
+    }
+
     const result = primaryResult ?? { entries: [] };
-    const filteredEntries = fusedEntries.filter(
-      (entry) => entry.score > retrievalAffinityThreshold
+    const filteredEntries = candidateEntries.filter(
+      (entry) => entry.score > retrievalAffinityThreshold || hybridEnabled
     ) as Array<RetrievalResultEntry>;
     const rankedEntries = rerankEnabled
       ? rerankRetrievalEntries(originalUserPrompt, filteredEntries, {

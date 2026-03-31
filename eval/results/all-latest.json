@@ -1,8 +1,8 @@
 {
-  "generatedAt": "2026-03-31T05:32:51.346Z",
+  "generatedAt": "2026-03-31T05:42:53.646Z",
   "metrics": {
-    "totalCases": 12,
-    "passedCases": 12,
+    "totalCases": 13,
+    "passedCases": 13,
     "failedCases": 0,
     "accuracy": 1
   },
@@ -19,8 +19,8 @@
     {
       "suite": "hard",
       "metrics": {
-        "totalCases": 6,
-        "passedCases": 6,
+        "totalCases": 7,
+        "passedCases": 7,
         "failedCases": 0,
         "accuracy": 1
       }
@@ -98,6 +98,12 @@
       "id": "rerank-diversity-penalty-1",
       "ok": true,
       "summary": "rerank-diversity-penalty-1: reranked 3 entries"
+    },
+    {
+      "suite": "hard",
+      "id": "hybrid-quoted-span-1",
+      "ok": true,
+      "summary": "hybrid-quoted-span-1: hybrid 5 entries"
     }
   ]
 }

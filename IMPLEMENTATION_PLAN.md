@@ -25,7 +25,7 @@ The plan is intentionally staged:
 - [x] Expand eval coverage with hard, adversarial, and no-match retrieval cases.
 - [x] Add a richer rerank smoke/eval matrix covering redundancy and complementary evidence selection.
 - [ ] Revisit neighbor expansion only if future SDK retrieval metadata exposes adjacency.
-- [ ] Consider a lightweight lexical/hybrid retrieval slice before any model-based rerank hook.
+- [x] Consider a lightweight lexical/hybrid retrieval slice before any model-based rerank hook.
 
 ---
 
@@ -338,10 +338,10 @@ Combine semantic retrieval with lexical retrieval.
 - merged candidate pool outperforms semantic-only baseline on evals
 
 #### Checklist
-- [ ] implement lexical scoring over chunk text and headings
-- [ ] merge semantic and lexical candidate lists
-- [ ] expose weights in config
-- [ ] add eval cases for exact-match terminology queries
+- [x] implement lexical scoring over chunk text and headings
+- [x] merge semantic and lexical candidate lists
+- [x] expose weights in config
+- [x] add eval cases for exact-match terminology queries
 
 ---
 

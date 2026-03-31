@@ -5,6 +5,8 @@ import { dedupeEvidenceEntries } from "../src/evidence";
 import { runAnswerabilityGate } from "../src/gating";
 import { buildEvalMetrics } from "../src/metrics";
 import { generateQueryRewrites } from "../src/queryRewrite";
+import { mergeHybridCandidates } from "../src/hybridRetrieve";
+import { lexicalRetrieve } from "../src/lexicalRetrieve";
 import { rerankRetrievalEntries } from "../src/rerank";
 import { buildGroundingInstruction, sanitizeRetrievedText } from "../src/safety";
 import type { EvalCase } from "../src/types/eval";
@@ -212,6 +214,45 @@ function evaluateCase(testCase: EvalCase) {
         );
       }
       return { summary: `${testCase.id}: reranked ${ranked.length} entries` };
+    }
+    case "hybrid": {
+      const prompt = String(testCase.input.prompt);
+      const semanticEntries = ((testCase.input.semanticEntries as Array<any>) ?? []).map(
+        makeRetrievalEntry
+      );
+      const documents = ((testCase.input.documents as Array<any>) ?? []).map((document) => ({
+        file: makeFileHandle(String(document.fileName)),
+        content: String(document.content),
+      }));
+      const lexicalEntries = lexicalRetrieve(
+        prompt,
+        documents,
+        Number(testCase.input.lexicalCandidateCount ?? 4)
+      );
+      const hybrid = mergeHybridCandidates(semanticEntries, lexicalEntries, {
+        semanticWeight: Number(testCase.input.semanticWeight ?? 0.65),
+        lexicalWeight: Number(testCase.input.lexicalWeight ?? 0.35),
+        maxCandidates: Number(testCase.input.hybridCandidateCount ?? 6),
+      });
+      const mustContain = String(testCase.expected.mustContain ?? "");
+      const minLexicalEntries = Number(testCase.expected.minLexicalEntries ?? 0);
+      const minHybridEntries = Number(testCase.expected.minHybridEntries ?? 0);
+
+      assert(
+        lexicalEntries.length >= minLexicalEntries,
+        `Expected at least ${minLexicalEntries} lexical entries, got ${lexicalEntries.length}.`
+      );
+      assert(
+        hybrid.length >= minHybridEntries,
+        `Expected at least ${minHybridEntries} hybrid entries, got ${hybrid.length}.`
+      );
+      if (mustContain) {
+        assert(
+          hybrid.some((entry) => entry.content.includes(mustContain)),
+          `Expected hybrid candidates to include '${mustContain}'.`
+        );
+      }
+      return { summary: `${testCase.id}: hybrid ${hybrid.length} entries` };
     }
     default:
       throw new Error(`Unsupported eval component: ${testCase.component}`);

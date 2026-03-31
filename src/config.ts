@@ -164,6 +164,53 @@ export const configSchematics = createConfigSchematics()
     6
     )
   .field(
+    "hybridEnabled",
+    "boolean",
+    {
+      displayName: "Hybrid Retrieval",
+      subtitle:
+        "Blend semantic retrieval with local lexical candidate scoring over parsed file content.",
+    },
+    false
+  )
+  .field(
+    "lexicalWeight",
+    "numeric",
+    {
+      min: 0.0,
+      max: 1.0,
+      displayName: "Lexical Weight",
+      subtitle: "Weight assigned to local lexical candidates in hybrid retrieval.",
+      slider: { min: 0.0, max: 1.0, step: 0.05 },
+    },
+    0.35
+  )
+  .field(
+    "semanticWeight",
+    "numeric",
+    {
+      min: 0.0,
+      max: 1.0,
+      displayName: "Semantic Weight",
+      subtitle: "Weight assigned to semantic retrieval candidates in hybrid retrieval.",
+      slider: { min: 0.0, max: 1.0, step: 0.05 },
+    },
+    0.65
+  )
+  .field(
+    "hybridCandidateCount",
+    "numeric",
+    {
+      int: true,
+      min: 1,
+      max: 20,
+      displayName: "Hybrid Candidate Count",
+      subtitle: "Maximum number of merged semantic and lexical candidates to keep.",
+      slider: { min: 1, max: 20, step: 1 },
+    },
+    8
+  )
+  .field(
     "rerankEnabled",
     "boolean",
     {
