@@ -1,30 +1,21 @@
+import type { RetrievalResultEntry } from "@lmstudio/sdk";
 import type { RetrievalFusionMethod } from "./types/retrieval";
 
-interface RetrievalEntry {
-  score: number;
-  content: string;
-  source?: {
-    fileName?: string;
-    [key: string]: unknown;
-  };
-  [key: string]: unknown;
-}
-
-function buildEntryKey(entry: RetrievalEntry) {
-  const fileName = entry.source?.fileName ?? "unknown";
+function buildEntryKey(entry: RetrievalResultEntry) {
+  const fileName = entry.source.name ?? entry.source.identifier;
   const content = entry.content.trim().toLowerCase();
   return `${fileName}::${content}`;
 }
 
 export function fuseRetrievalEntries(
-  retrievalRuns: Array<Array<RetrievalEntry>>,
+  retrievalRuns: Array<Array<RetrievalResultEntry>>,
   method: RetrievalFusionMethod,
   limit: number
-): RetrievalEntry[] {
+): Array<RetrievalResultEntry> {
   const fusedEntries = new Map<
     string,
     {
-      entry: RetrievalEntry;
+      entry: RetrievalResultEntry;
       fusedScore: number;
       bestScore: number;
     }

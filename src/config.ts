@@ -163,4 +163,30 @@ export const configSchematics = createConfigSchematics()
     },
     6
   )
+  .field(
+    "dedupeSimilarityThreshold",
+    "numeric",
+    {
+      min: 0.0,
+      max: 1.0,
+      displayName: "Evidence Dedupe Threshold",
+      subtitle:
+        "Similarity threshold used to drop near-duplicate retrieved evidence from the same file.",
+      slider: { min: 0.0, max: 1.0, step: 0.01 },
+    },
+    0.85
+  )
+  .field(
+    "maxEvidenceBlocks",
+    "numeric",
+    {
+      int: true,
+      min: 1,
+      max: 10,
+      displayName: "Max Evidence Blocks",
+      subtitle: "Maximum number of deduplicated evidence blocks to inject into the prompt.",
+      slider: { min: 1, max: 10, step: 1 },
+    },
+    4
+  )
   .build();
