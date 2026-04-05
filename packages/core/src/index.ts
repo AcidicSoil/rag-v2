@@ -2,6 +2,7 @@ export * from "./contracts";
 export * from "./corrective";
 export * from "./gating";
 export * from "./localRetrieval";
+export * from "./orchestrator";
 export * from "./outputContracts";
 export * from "./policyContracts";
 export * from "./requestOptions";

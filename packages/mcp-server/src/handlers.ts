@@ -1,10 +1,13 @@
-import { buildRagEvidenceBlocks, rerankRagCandidates } from "../../core/src/retrievalPipeline";
-import type { RagCandidate } from "../../core/src/contracts";
-import type { RagExecutionRoute } from "../../core/src/outputContracts";
+import { rerankRagCandidates } from "../../core/src/retrievalPipeline";
+import { orchestrateRagRequest } from "../../core/src/orchestrator";
 import type {
-  RagInlineDocumentInput,
+  RagAnswerEnvelopeOutput,
+  RagPreparedPromptOutput,
+  RagSearchResultsOutput,
+} from "../../core/src/outputContracts";
+import type { RagRequestOptions } from "../../core/src/requestOptions";
+import type {
   RagMcpRuntime,
-  RagPrechunkedCandidateInput,
   RagPreparePromptResponse,
   RagToolHandlerSet,
 } from "../../core/src/runtimeContracts";
@@ -25,65 +28,85 @@ export function createMcpToolHandlers(runtime: RagMcpRuntime): RagToolHandlerSet
   return {
     async ragAnswer(input: RagAnswerInput) {
       const parsed = ragAnswerInputSchema.parse(input);
-      const prepared = await prepareEvidence(runtime, parsed, parsed.query, parsed.retrieval);
-      const composed = await runtime.answerComposer.answer({
-        query: parsed.query,
-        corpus: prepared.corpus,
-        evidence: prepared.evidence,
-        route: prepared.route,
-        groundingMode: parsed.groundingMode,
-      });
+      const output = (await orchestrateRagRequest(
+        {
+          query: parsed.query,
+          documents: parsed.documents,
+          paths: parsed.paths,
+          chunks: parsed.chunks,
+          requestedRoute: parsed.mode,
+          options: mergeLegacyOverrides(parsed),
+          outputMode: "answer-envelope",
+        },
+        runtime
+      )) as RagAnswerEnvelopeOutput;
 
       return {
-        answer: composed.answer ?? prepared.preparedPrompt,
-        route: prepared.route,
-        confidence: composed.confidence,
-        evidence: prepared.evidence.map((block) => ({
+        answer: output.answer ?? output.preparedPrompt ?? "",
+        route: output.route,
+        confidence: output.confidence,
+        evidence: output.evidence.map((block) => ({
           label: block.label,
           fileName: block.fileName,
           content: block.content,
           score: block.score,
         })),
-        unsupportedClaimWarnings: composed.unsupportedClaimWarnings,
+        unsupportedClaimWarnings: output.unsupportedClaimWarnings,
       };
     },
 
     async ragSearch(input: RagSearchInput) {
       const parsed = ragSearchInputSchema.parse(input);
-      const prepared = await prepareEvidence(runtime, parsed, parsed.query, parsed.retrieval);
+      const output = (await orchestrateRagRequest(
+        {
+          query: parsed.query,
+          documents: parsed.documents,
+          paths: parsed.paths,
+          chunks: parsed.chunks,
+          options: mergeLegacyOverrides(parsed),
+          outputMode: "search-results",
+        },
+        runtime
+      )) as RagSearchResultsOutput;
+
       return {
-        candidates: prepared.candidates,
-        route: prepared.route,
+        candidates: output.candidates.map((candidate) => ({
+          sourceId: candidate.sourceId,
+          sourceName: candidate.sourceName,
+          content: candidate.content,
+          score: candidate.score,
+          metadata: candidate.metadata,
+        })),
+        route: output.route,
       };
     },
 
     async ragPreparePrompt(input: RagPreparePromptInput): Promise<RagPreparePromptResponse> {
       const parsed = ragPreparePromptInputSchema.parse(input);
-      const prepared = await prepareEvidence(runtime, parsed, parsed.query, parsed.retrieval);
+      const output = (await orchestrateRagRequest(
+        {
+          query: parsed.query,
+          documents: parsed.documents,
+          paths: parsed.paths,
+          chunks: parsed.chunks,
+          requestedRoute: parsed.mode,
+          options: mergeLegacyOverrides(parsed),
+          outputMode: "prepared-prompt",
+        },
+        runtime
+      )) as RagPreparedPromptOutput;
+
       return {
-        route: prepared.route,
-        preparedPrompt: prepared.preparedPrompt,
-        evidence: prepared.evidence.map((block) => ({
+        route: output.route,
+        preparedPrompt: output.preparedPrompt,
+        evidence: output.evidence.map((block) => ({
           label: block.label,
           fileName: block.fileName,
           content: block.content,
           score: block.score,
         })),
-        diagnostics: {
-          route: prepared.route,
-          notes: [
-            "Prepared prompt assembled via the current MCP handler path.",
-            runtime.semanticRetriever
-              ? "Semantic runtime capability detected."
-              : "Using degraded lexical/runtime-compatible retrieval path.",
-          ],
-          degraded: !runtime.semanticRetriever,
-          runtimeCapabilities: collectRuntimeCapabilities(runtime),
-        },
-        unsupportedClaimWarnings:
-          prepared.evidence.length > 0
-            ? []
-            : ["No evidence was available in the current runtime."],
+        diagnostics: output.diagnostics,
+        unsupportedClaimWarnings: output.unsupportedClaimWarnings,
       };
     },
 
@@ -113,110 +136,62 @@ export function createMcpToolHandlers(runtime: RagMcpRuntime): RagToolHandlerSet
   };
 }
 
-async function prepareEvidence(
-  runtime: RagMcpRuntime,
-  input: {
-    mode?: string;
-    documents?: Array<RagInlineDocumentInput>;
-    paths?: Array<string>;
-    chunks?: Array<RagPrechunkedCandidateInput>;
-  },
-  query: string,
-  retrieval: { rerankTopK?: number; maxEvidenceBlocks?: number } | undefined
-) {
-  const corpus = await runtime.loader.load(input);
-  const candidates = await runtime.retriever.search({
-    query,
-    corpus,
-    options: retrieval,
-  });
-  const reranked = rerankRagCandidates(query, candidates, {
-    topK: retrieval?.rerankTopK ?? retrieval?.maxEvidenceBlocks ?? 5,
-    strategy: "heuristic-v1",
-  });
-  const evidence = buildRagEvidenceBlocks(
-    reranked.map((ranked) => ({
-      ...ranked.candidate,
-      score: ranked.rerankScore,
-    }))
-  );
-  const route = deriveRoute(input, corpus, candidates);
-
-  return {
-    corpus,
-    candidates,
-    evidence,
-    route,
-    preparedPrompt: buildPreparedPrompt(query, route, evidence),
+function mergeLegacyOverrides(input: {
+  groundingMode?: "off" | "warn-on-weak-evidence" | "require-evidence";
+  retrieval?: {
+    multiQueryEnabled?: boolean;
+    multiQueryCount?: number;
+    fusionMethod?: "reciprocal-rank-fusion" | "max-score";
+    hybridEnabled?: boolean;
+    rerankEnabled?: boolean;
+    rerankTopK?: number;
+    maxEvidenceBlocks?: number;
   };
-}
-
-function buildPreparedPrompt(query: string, route: string, evidence: ReturnType<typeof buildRagEvidenceBlocks>) {
-  if (evidence.length === 0) {
-    return [
-      `Question: ${query}`,
-      `Route: ${route}`,
-      "No evidence was retrieved.",
-    ].join("\n\n");
-  }
-
-  const serializedEvidence = evidence
-    .map(
-      (block, index) =>
-        `[${index + 1}] ${block.fileName} (${block.score.toFixed(3)})\n${block.content}`
-    )
-    .join("\n\n");
-
-  return [
-    `Question: ${query}`,
-    `Route: ${route}`,
-    "Use the grounded evidence below when answering.",
-    serializedEvidence,
-  ].join("\n\n");
-}
-
-function collectRuntimeCapabilities(runtime: RagMcpRuntime) {
-  const capabilities: Array<string> = ["loader", "retriever", "answerComposer", "inspector"];
-  if (runtime.documentParser) {
-    capabilities.push("documentParser");
-  }
-  if (runtime.embeddingModelResolver) {
-    capabilities.push("embeddingModelResolver");
-  }
-  if (runtime.semanticRetriever) {
-    capabilities.push("semanticRetriever");
-  }
-  if (runtime.llmReranker) {
-    capabilities.push("llmReranker");
-  }
-  if (runtime.contextSizer) {
-    capabilities.push("contextSizer");
-  }
-  if (runtime.citationEmitter) {
-    capabilities.push("citationEmitter");
-  }
-  if (runtime.policyEngine) {
-    capabilities.push("policyEngine");
-  }
-  return capabilities;
-}
-
-function deriveRoute(
-  input: { mode?: string },
-  corpus: { documents: Array<unknown>; candidates?: Array<RagCandidate> },
-  candidates: Array<RagCandidate>
-): RagExecutionRoute {
-  if (input.mode && input.mode !== "auto") {
-    return input.mode as RagExecutionRoute;
-  }
-
-  if ((corpus.candidates?.length ?? 0) > 0) {
-    return "prechunked-retrieval";
-  }
-
-  if (corpus.documents.length <= 2 && candidates.length <= 4) {
-    return "lightweight-retrieval";
-  }
-
-  return "retrieval";
+  options?: RagRequestOptions;
+}): RagRequestOptions {
+  return {
+    policy: {
+      groundingMode:
+        input.options?.policy?.groundingMode ??
+        input.groundingMode ??
+        "warn-on-weak-evidence",
+      answerabilityGateEnabled: input.options?.policy?.answerabilityGateEnabled,
+      answerabilityGateThreshold: input.options?.policy?.answerabilityGateThreshold,
+      ambiguousQueryBehavior: input.options?.policy?.ambiguousQueryBehavior,
+    },
+    routing: {
+      requestedRoute: input.options?.routing?.requestedRoute,
+      fullContextTokenLimit: input.options?.routing?.fullContextTokenLimit,
+      activeModelContextTokens: input.options?.routing?.activeModelContextTokens,
+      correctiveEnabled: input.options?.routing?.correctiveEnabled,
+      correctiveMaxAttempts: input.options?.routing?.correctiveMaxAttempts,
+    },
+    retrieval: {
+      multiQueryEnabled:
+        input.options?.retrieval?.multiQueryEnabled ??
+        input.retrieval?.multiQueryEnabled,
+      multiQueryCount:
+        input.options?.retrieval?.multiQueryCount ??
+        input.retrieval?.multiQueryCount,
+      fusionMethod:
+        input.options?.retrieval?.fusionMethod ?? input.retrieval?.fusionMethod,
+      hybridEnabled:
+        input.options?.retrieval?.hybridEnabled ?? input.retrieval?.hybridEnabled,
+      maxCandidates: input.options?.retrieval?.maxCandidates,
+      maxEvidenceBlocks:
+        input.options?.retrieval?.maxEvidenceBlocks ??
+        input.retrieval?.maxEvidenceBlocks,
+      minScore: input.options?.retrieval?.minScore,
+      dedupeSimilarityThreshold:
+        input.options?.retrieval?.dedupeSimilarityThreshold,
+    },
+    rerank: {
+      enabled:
+        input.options?.rerank?.enabled ?? input.retrieval?.rerankEnabled,
+      strategy: input.options?.rerank?.strategy,
+      topK: input.options?.rerank?.topK ?? input.retrieval?.rerankTopK,
+    },
+    safety: input.options?.safety,
+    outputMode: input.options?.outputMode,
+  };
 }

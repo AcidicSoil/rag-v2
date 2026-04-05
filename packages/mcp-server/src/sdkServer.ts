@@ -4,6 +4,7 @@ import { z } from "zod";
 import type { RagToolHandlerSet } from "../../core/src/runtimeContracts";
 import { createDefaultMcpRuntime } from "./defaultRuntime";
 import { createMcpToolHandlers } from "./handlers";
+import { createLmStudioMcpRuntime } from "./lmstudioRuntime";
 
 const inlineDocumentShape = {
   id: z.string().min(1).describe("Document identifier"),
@@ -18,6 +19,58 @@ const prechunkedCandidateShape = {
   content: z.string().min(1).describe("Candidate chunk text"),
   score: z.number().finite().nonnegative().describe("Initial relevance score"),
   metadata: z.record(z.unknown()).optional().describe("Optional chunk metadata"),
+};
+
+const groupedOptionsShape = {
+  policy: z
+    .object({
+      groundingMode: z
+        .enum(["off", "warn-on-weak-evidence", "require-evidence"])
+        .optional(),
+      answerabilityGateEnabled: z.boolean().optional(),
+      answerabilityGateThreshold: z.number().min(0).max(1).optional(),
+      ambiguousQueryBehavior: z
+        .enum(["proceed", "ask-for-clarification", "warn"])
+        .optional(),
+    })
+    .optional(),
+  routing: z
+    .object({
+      requestedRoute: z
+        .enum(["auto", "no-retrieval", "full-context", "retrieval", "corrective"])
+        .optional(),
+      fullContextTokenLimit: z.number().int().min(1).optional(),
+      activeModelContextTokens: z.number().int().min(1).optional(),
+      correctiveEnabled: z.boolean().optional(),
+      correctiveMaxAttempts: z.number().int().min(0).max(4).optional(),
+    })
+    .optional(),
+  retrieval: z
+    .object({
+      multiQueryEnabled: z.boolean().optional(),
+      multiQueryCount: z.number().int().min(1).max(8).optional(),
+      fusionMethod: z.enum(["reciprocal-rank-fusion", "max-score"]).optional(),
+      hybridEnabled: z.boolean().optional(),
+      maxCandidates: z.number().int().min(1).max(32).optional(),
+      maxEvidenceBlocks: z.number().int().min(1).max(20).optional(),
+      minScore: z.number().min(0).max(1).optional(),
+      dedupeSimilarityThreshold: z.number().min(0).max(1).optional(),
+    })
+    .optional(),
+  rerank: z
+    .object({
+      enabled: z.boolean().optional(),
+      strategy: z.enum(["heuristic-v1", "heuristic-then-llm"]).optional(),
+      topK: z.number().int().min(1).max(20).optional(),
+    })
+    .optional(),
+  safety: z
+    .object({
+      sanitizeRetrievedText: z.boolean().optional(),
+      stripInstructionalSpans: z.boolean().optional(),
+      requireEvidence: z.boolean().optional(),
+    })
+    .optional(),
 };
 
 const retrievalOverridesShape = {
@@ -57,8 +110,12 @@ export function createOfficialMcpServer(handlers: RagToolHandlerSet) {
         groundingMode: z
           .enum(["off", "warn-on-weak-evidence", "require-evidence"])
           .optional()
-          .describe("How strictly to ground the answer in evidence"),
-        retrieval: z.object(retrievalOverridesShape).optional(),
+          .describe("Legacy grounding alias; prefer options.policy.groundingMode"),
+        options: z.object(groupedOptionsShape).optional(),
+        retrieval: z
+          .object(retrievalOverridesShape)
+          .optional()
+          .describe("Legacy retrieval alias; prefer options.retrieval / options.rerank"),
         ...corpusInputShape,
       } as any,
     },
@@ -83,7 +140,11 @@ export function createOfficialMcpServer(handlers: RagToolHandlerSet) {
         "Search a grounded corpus and return ranked candidate chunks.",
       inputSchema: {
         query: z.string().min(1).describe("Query to retrieve against the corpus"),
-        retrieval: z.object(retrievalOverridesShape).optional(),
+        options: z.object(groupedOptionsShape).optional(),
+        retrieval: z
+          .object(retrievalOverridesShape)
+          .optional()
+          .describe("Legacy retrieval alias; prefer options.retrieval / options.rerank"),
         ...corpusInputShape,
       } as any,
     },
@@ -115,8 +176,12 @@ export function createOfficialMcpServer(handlers: RagToolHandlerSet) {
         groundingMode: z
           .enum(["off", "warn-on-weak-evidence", "require-evidence"])
           .optional()
-          .describe("How strictly to ground the prepared prompt in evidence"),
-        retrieval: z.object(retrievalOverridesShape).optional(),
+          .describe("Legacy grounding alias; prefer options.policy.groundingMode"),
+        options: z.object(groupedOptionsShape).optional(),
+        retrieval: z
+          .object(retrievalOverridesShape)
+          .optional()
+          .describe("Legacy retrieval alias; prefer options.retrieval / options.rerank"),
         ...corpusInputShape,
       } as any,
     },
@@ -189,9 +254,14 @@ export function createOfficialMcpServer(handlers: RagToolHandlerSet) {
 }
 
 export async function startOfficialStdioMcpServer() {
-  const handlers = createMcpToolHandlers(createDefaultMcpRuntime());
+  const runtimeMode = process.env.RAG_V2_MCP_RUNTIME?.toLowerCase() ?? "default";
+  const runtime =
+    runtimeMode === "lmstudio"
+      ? await createLmStudioMcpRuntime()
+      : createDefaultMcpRuntime();
+  const handlers = createMcpToolHandlers(runtime);
   const server = createOfficialMcpServer(handlers);
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error("rag-v2 MCP server running on stdio");
+  console.error(`rag-v2 MCP server running on stdio (${runtimeMode} runtime)`);
 }

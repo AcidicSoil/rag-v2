@@ -28,15 +28,79 @@ export const groundingModeSchema = z.enum([
   "require-evidence",
 ]);
 
-export const retrievalOverridesSchema = z.object({
-  multiQueryEnabled: z.boolean().optional(),
-  multiQueryCount: z.number().int().min(1).max(8).optional(),
-  fusionMethod: z.enum(["reciprocal-rank-fusion", "max-score"]).optional(),
-  hybridEnabled: z.boolean().optional(),
-  rerankEnabled: z.boolean().optional(),
-  rerankTopK: z.number().int().min(1).max(20).optional(),
-  maxEvidenceBlocks: z.number().int().min(1).max(20).optional(),
-}).optional();
+export const policyOptionsSchema = z
+  .object({
+    groundingMode: groundingModeSchema.optional(),
+    answerabilityGateEnabled: z.boolean().optional(),
+    answerabilityGateThreshold: z.number().min(0).max(1).optional(),
+    ambiguousQueryBehavior: z
+      .enum(["proceed", "ask-for-clarification", "warn"])
+      .optional(),
+  })
+  .optional();
+
+export const routingOptionsSchema = z
+  .object({
+    requestedRoute: z
+      .enum(["auto", "no-retrieval", "full-context", "retrieval", "corrective"])
+      .optional(),
+    fullContextTokenLimit: z.number().int().min(1).optional(),
+    activeModelContextTokens: z.number().int().min(1).optional(),
+    correctiveEnabled: z.boolean().optional(),
+    correctiveMaxAttempts: z.number().int().min(0).max(4).optional(),
+  })
+  .optional();
+
+export const retrievalOptionsSchema = z
+  .object({
+    multiQueryEnabled: z.boolean().optional(),
+    multiQueryCount: z.number().int().min(1).max(8).optional(),
+    fusionMethod: z.enum(["reciprocal-rank-fusion", "max-score"]).optional(),
+    hybridEnabled: z.boolean().optional(),
+    maxCandidates: z.number().int().min(1).max(32).optional(),
+    maxEvidenceBlocks: z.number().int().min(1).max(20).optional(),
+    minScore: z.number().min(0).max(1).optional(),
+    dedupeSimilarityThreshold: z.number().min(0).max(1).optional(),
+  })
+  .optional();
+
+export const rerankOptionsSchema = z
+  .object({
+    enabled: z.boolean().optional(),
+    strategy: z.enum(["heuristic-v1", "heuristic-then-llm"]).optional(),
+    topK: z.number().int().min(1).max(20).optional(),
+  })
+  .optional();
+
+export const safetyOptionsSchema = z
+  .object({
+    sanitizeRetrievedText: z.boolean().optional(),
+    stripInstructionalSpans: z.boolean().optional(),
+    requireEvidence: z.boolean().optional(),
+  })
+  .optional();
+
+export const groupedRequestOptionsSchema = z
+  .object({
+    policy: policyOptionsSchema,
+    routing: routingOptionsSchema,
+    retrieval: retrievalOptionsSchema,
+    rerank: rerankOptionsSchema,
+    safety: safetyOptionsSchema,
+  })
+  .optional();
+
+export const retrievalOverridesSchema = z
+  .object({
+    multiQueryEnabled: z.boolean().optional(),
+    multiQueryCount: z.number().int().min(1).max(8).optional(),
+    fusionMethod: z.enum(["reciprocal-rank-fusion", "max-score"]).optional(),
+    hybridEnabled: z.boolean().optional(),
+    rerankEnabled: z.boolean().optional(),
+    rerankTopK: z.number().int().min(1).max(20).optional(),
+    maxEvidenceBlocks: z.number().int().min(1).max(20).optional(),
+  })
+  .optional();
 
 export const corpusInputBaseSchema = z.object({
   documents: z.array(inlineDocumentSchema).optional(),
@@ -59,6 +123,7 @@ export const ragAnswerInputSchema = corpusInputBaseSchema
     query: z.string().min(1),
     mode: ragModeSchema.default("auto"),
     groundingMode: groundingModeSchema.default("warn-on-weak-evidence"),
+    options: groupedRequestOptionsSchema,
     retrieval: retrievalOverridesSchema,
   })
   .refine(
@@ -74,6 +139,7 @@ export const ragAnswerInputSchema = corpusInputBaseSchema
 export const ragSearchInputSchema = corpusInputBaseSchema
   .extend({
     query: z.string().min(1),
+    options: groupedRequestOptionsSchema,
     retrieval: retrievalOverridesSchema,
   })
   .refine(
@@ -91,6 +157,7 @@ export const ragPreparePromptInputSchema = corpusInputBaseSchema
     query: z.string().min(1),
     mode: ragModeSchema.default("auto"),
     groundingMode: groundingModeSchema.default("warn-on-weak-evidence"),
+    options: groupedRequestOptionsSchema,
     retrieval: retrievalOverridesSchema,
   })
   .refine(
