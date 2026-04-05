@@ -14,6 +14,7 @@ import type {
 import { toRagCandidates, toRetrievalResultEntries } from "../../adapter-lmstudio/src/lmstudioCoreBridge";
 import { performModelAssistedRerank } from "../../adapter-lmstudio/src/modelRerank";
 import type { RankedRetrievalEntry } from "../../adapter-lmstudio/src/types/rerank";
+import { discoverSupportedTextFiles, resolveUserPath } from "./pathResolution";
 
 function estimateTokens(value: string) {
   return Math.ceil(value.trim().length / 4);
@@ -236,19 +237,23 @@ async function loadLmStudioPathDocuments(
   const fileHandles: Array<FileHandle> = [];
 
   for (const inputPath of paths) {
-    const fileHandle = await client.files.prepareFile(inputPath);
-    const parsed = await client.files.parseDocument(fileHandle);
-    documents.push({
-      id: fileHandle.identifier,
-      name: path.basename(inputPath),
-      content: parsed.content,
-      metadata: {
-        absolutePath: path.resolve(inputPath),
-        fileHandle,
-        sourceType: "lmstudio-path",
-      },
-    });
-    fileHandles.push(fileHandle);
+    const discoveredPaths = await discoverSupportedTextFiles(inputPath);
+    for (const discoveredPath of discoveredPaths) {
+      const fileHandle = await client.files.prepareFile(discoveredPath);
+      const parsed = await client.files.parseDocument(fileHandle);
+      documents.push({
+        id: fileHandle.identifier,
+        name: path.relative(process.cwd(), discoveredPath) || path.basename(discoveredPath),
+        content: parsed.content,
+        metadata: {
+          absolutePath: resolveUserPath(inputPath),
+          discoveredPath,
+          fileHandle,
+          sourceType: "lmstudio-path",
+        },
+      });
+      fileHandles.push(fileHandle);
+    }
   }
 
   return { documents, fileHandles };

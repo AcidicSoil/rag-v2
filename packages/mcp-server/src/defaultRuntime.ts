@@ -1,46 +1,9 @@
-import { readFile, readdir, stat } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import type { RagEvidenceBlock, RagDocument } from "../../core/src/contracts";
 import { lexicalRetrieveFromDocuments } from "../../core/src/localRetrieval";
-import type { RagLoadedCorpus, RagMcpRuntime } from "../../core/src/runtimeContracts";
-
-const TEXT_FILE_EXTENSIONS = new Set([
-  ".c",
-  ".cc",
-  ".cfg",
-  ".conf",
-  ".cpp",
-  ".cs",
-  ".css",
-  ".csv",
-  ".go",
-  ".h",
-  ".hpp",
-  ".html",
-  ".ini",
-  ".java",
-  ".js",
-  ".json",
-  ".kt",
-  ".log",
-  ".lua",
-  ".md",
-  ".mjs",
-  ".php",
-  ".py",
-  ".rb",
-  ".rs",
-  ".sh",
-  ".sql",
-  ".svg",
-  ".toml",
-  ".ts",
-  ".tsx",
-  ".txt",
-  ".xml",
-  ".yaml",
-  ".yml",
-]);
+import type { RagMcpRuntime } from "../../core/src/runtimeContracts";
+import { discoverSupportedTextFiles, resolveUserPath } from "./pathResolution";
 
 function estimateTokens(value: string) {
   return Math.ceil(value.trim().length / 4);
@@ -136,8 +99,7 @@ async function loadDocumentsFromPaths(paths: Array<string>): Promise<Array<RagDo
   const results: Array<RagDocument> = [];
 
   for (const inputPath of paths) {
-    const absolutePath = path.resolve(inputPath);
-    const discoveredPaths = await discoverTextFiles(absolutePath);
+    const discoveredPaths = await discoverSupportedTextFiles(inputPath);
     for (const discoveredPath of discoveredPaths) {
       const content = await readTextFile(discoveredPath);
       if (!content) {
@@ -149,7 +111,8 @@ async function loadDocumentsFromPaths(paths: Array<string>): Promise<Array<RagDo
         name: path.relative(process.cwd(), discoveredPath) || path.basename(discoveredPath),
         content,
         metadata: {
-          absolutePath: discoveredPath,
+          absolutePath: resolveUserPath(inputPath),
+          discoveredPath,
           sourceType: "filesystem-path",
         },
       });
@@ -157,41 +120,6 @@ async function loadDocumentsFromPaths(paths: Array<string>): Promise<Array<RagDo
   }
 
   return results;
-}
-
-async function discoverTextFiles(inputPath: string): Promise<Array<string>> {
-  const pathStat = await stat(inputPath);
-  if (pathStat.isFile()) {
-    return isSupportedTextFile(inputPath) ? [inputPath] : [];
-  }
-
-  if (!pathStat.isDirectory()) {
-    return [];
-  }
-
-  const entries = await readdir(inputPath, { withFileTypes: true });
-  const results: Array<string> = [];
-  for (const entry of entries) {
-    if (entry.name.startsWith(".")) {
-      continue;
-    }
-
-    const resolved = path.join(inputPath, entry.name);
-    if (entry.isDirectory()) {
-      results.push(...(await discoverTextFiles(resolved)));
-      continue;
-    }
-
-    if (entry.isFile() && isSupportedTextFile(resolved)) {
-      results.push(resolved);
-    }
-  }
-
-  return results;
-}
-
-function isSupportedTextFile(filePath: string) {
-  return TEXT_FILE_EXTENSIONS.has(path.extname(filePath).toLowerCase());
 }
 
 async function readTextFile(filePath: string): Promise<string> {
@@ -216,8 +144,4 @@ function buildStubAnswer(
     `Top evidence came from ${top.fileName} with score ${top.score.toFixed(3)}.`,
     `Evidence excerpt: ${top.content}`,
   ].join(" ");
-}
-
-function normalizeWhitespace(value: string) {
-  return value.trim().replace(/\s+/g, " ");
 }

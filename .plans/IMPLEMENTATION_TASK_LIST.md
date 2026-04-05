@@ -43,9 +43,14 @@
    - Remove dead helper paths that become redundant after orchestration centralization.
 
 ## Current implementation focus
-- [x] Step 1 started and landed: shared request / output contract files were added, runtime capability interfaces were expanded, and MCP was updated with an initial `rag_prepare_prompt` surface to keep the widened contracts live.
-- [ ] Next: implement the shared core orchestrator so both the LM Studio adapter and MCP can consume one orchestration path.
-- [ ] After the orchestrator lands, migrate the LM Studio adapter and MCP handlers/runtimes onto it and then widen the grouped MCP option surface to match real runtime support.
+- [x] Step 1 landed: shared request / output contract files were added, runtime capability interfaces were expanded, and MCP was updated with an initial `rag_prepare_prompt` surface.
+- [x] Step 2 landed: shared core orchestrator added in `packages/core/src/orchestrator.ts`.
+- [x] Step 3 landed structurally: the LM Studio adapter retrieval path now delegates through the shared orchestrator.
+- [x] Step 4 landed structurally: MCP now has both the degraded default runtime and an LM Studio-backed runtime entry.
+- [x] Step 5 landed: MCP contract/tool surface widened with grouped options and `rag_prepare_prompt`.
+- [x] Step 6 landed: MCP handlers delegate to the shared orchestrator.
+- [x] Follow-on improvement started and landed: MCP runtimes now normalize user paths consistently, expand `~`, and recurse directories in both degraded and LM Studio-backed modes.
+- [ ] Remaining proof work: validate the LM Studio-backed MCP runtime and adapter path against a live LM Studio session, since local CI here only proves static checks and non-LM-Studio smoke coverage.
 
 ## Non-goals for this pass
 - Ticket 220 is a user-review gate and will remain for human validation after implementation work is complete.

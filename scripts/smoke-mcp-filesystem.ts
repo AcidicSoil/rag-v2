@@ -12,6 +12,7 @@ function assert(condition: unknown, message: string): asserts condition {
 
 async function main() {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), "rag-v2-mcp-"));
+  const homeTempRoot = await mkdtemp(path.join(os.homedir(), "rag-v2-home-"));
 
   try {
     await writeFile(
@@ -23,6 +24,12 @@ async function main() {
     await writeFile(
       path.join(tempRoot, "docs", "tradeoffs.txt"),
       "Tradeoff summary\nHigher write latency is accepted to preserve failover consistency.\n",
+      "utf8"
+    );
+
+    await writeFile(
+      path.join(homeTempRoot, "tilde-path.md"),
+      "Path expansion proof\nThe deployment lives under the user's home projects directory.\n",
       "utf8"
     );
 
@@ -53,9 +60,26 @@ async function main() {
       "Expected filesystem rag_answer to cite the architecture file."
     );
 
+    const tildePath = homeTempRoot.replace(os.homedir(), "~");
+    const tildeInspect = await handlers.corpusInspect({
+      paths: [tildePath],
+    });
+    assert(tildeInspect.fileCount === 1, "Expected tilde-expanded corpus inspection to load one text file.");
+
+    const tildeSearch = await handlers.ragSearch({
+      query: "user's home projects directory",
+      paths: [tildePath],
+    });
+    assert(tildeSearch.candidates.length > 0, "Expected tilde-expanded rag_search to return candidates.");
+    assert(
+      tildeSearch.candidates.some((candidate) => candidate.sourceName.includes("tilde-path.md")),
+      "Expected tilde-expanded rag_search to include the tilde-path file."
+    );
+
     console.log("MCP filesystem smoke test passed.");
   } finally {
     await rm(tempRoot, { recursive: true, force: true });
+    await rm(homeTempRoot, { recursive: true, force: true });
   }
 }
 
