@@ -86,6 +86,23 @@ export const ragSearchInputSchema = corpusInputBaseSchema
     }
   );
 
+export const ragPreparePromptInputSchema = corpusInputBaseSchema
+  .extend({
+    query: z.string().min(1),
+    mode: ragModeSchema.default("auto"),
+    groundingMode: groundingModeSchema.default("warn-on-weak-evidence"),
+    retrieval: retrievalOverridesSchema,
+  })
+  .refine(
+    (value) =>
+      (value.documents?.length ?? 0) > 0 ||
+      (value.paths?.length ?? 0) > 0 ||
+      (value.chunks?.length ?? 0) > 0,
+    {
+      message: "Provide at least one of documents, paths, or chunks.",
+    }
+  );
+
 export const corpusInspectInputSchema = corpusInputSchema;
 
 export const rerankOnlyInputSchema = z.object({
@@ -114,6 +131,20 @@ export const ragSearchOutputSchema = z.object({
   route: z.string().optional(),
 });
 
+export const ragPreparePromptOutputSchema = z.object({
+  route: z.string(),
+  preparedPrompt: z.string(),
+  evidence: z.array(ragEvidenceBlockSchema),
+  diagnostics: z.object({
+    route: z.string(),
+    retrievalQueries: z.array(z.string()).optional(),
+    notes: z.array(z.string()).optional(),
+    degraded: z.boolean().optional(),
+    runtimeCapabilities: z.array(z.string()).optional(),
+  }),
+  unsupportedClaimWarnings: z.array(z.string()),
+});
+
 export const corpusInspectOutputSchema = z.object({
   fileCount: z.number().int().nonnegative(),
   chunkCount: z.number().int().nonnegative().optional(),
@@ -130,9 +161,11 @@ export const rerankOnlyOutputSchema = z.object({
 
 export type RagAnswerInput = z.infer<typeof ragAnswerInputSchema>;
 export type RagSearchInput = z.infer<typeof ragSearchInputSchema>;
+export type RagPreparePromptInput = z.infer<typeof ragPreparePromptInputSchema>;
 export type CorpusInspectInput = z.infer<typeof corpusInspectInputSchema>;
 export type RerankOnlyInput = z.infer<typeof rerankOnlyInputSchema>;
 export type RagAnswerOutput = z.infer<typeof ragAnswerOutputSchema>;
 export type RagSearchOutput = z.infer<typeof ragSearchOutputSchema>;
+export type RagPreparePromptOutput = z.infer<typeof ragPreparePromptOutputSchema>;
 export type CorpusInspectOutput = z.infer<typeof corpusInspectOutputSchema>;
 export type RerankOnlyOutput = z.infer<typeof rerankOnlyOutputSchema>;

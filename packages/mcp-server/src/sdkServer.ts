@@ -102,6 +102,39 @@ export function createOfficialMcpServer(handlers: RagToolHandlerSet) {
   );
 
   registerTool(
+    "rag_prepare_prompt",
+    {
+      description:
+        "Prepare a grounded prompt package without synthesizing the final answer.",
+      inputSchema: {
+        query: z.string().min(1).describe("User query to ground"),
+        mode: z
+          .enum(["auto", "full-context", "retrieval", "corrective"])
+          .optional()
+          .describe("Preferred retrieval mode"),
+        groundingMode: z
+          .enum(["off", "warn-on-weak-evidence", "require-evidence"])
+          .optional()
+          .describe("How strictly to ground the prepared prompt in evidence"),
+        retrieval: z.object(retrievalOverridesShape).optional(),
+        ...corpusInputShape,
+      } as any,
+    },
+    async (args: any) => {
+      const result = await handlers.ragPreparePrompt(args);
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(result, null, 2),
+          },
+        ],
+        structuredContent: result,
+      };
+    }
+  );
+
+  registerTool(
     "corpus_inspect",
     {
       description:

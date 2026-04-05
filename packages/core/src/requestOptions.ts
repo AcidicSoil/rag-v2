@@ -1,0 +1,65 @@
+import type { RagFusionMethod, RagRerankStrategy } from "./contracts";
+
+export type RagGroundingMode =
+  | "off"
+  | "warn-on-weak-evidence"
+  | "require-evidence";
+
+export type RagRequestedRoute =
+  | "auto"
+  | "no-retrieval"
+  | "full-context"
+  | "retrieval"
+  | "corrective";
+
+export type RagOutputMode =
+  | "prepared-prompt"
+  | "search-results"
+  | "answer-envelope";
+
+export interface RagPolicyOptions {
+  groundingMode?: RagGroundingMode;
+  answerabilityGateEnabled?: boolean;
+  answerabilityGateThreshold?: number;
+  ambiguousQueryBehavior?: "proceed" | "ask-for-clarification" | "warn";
+}
+
+export interface RagRoutingOptions {
+  requestedRoute?: RagRequestedRoute;
+  fullContextTokenLimit?: number;
+  activeModelContextTokens?: number;
+  correctiveEnabled?: boolean;
+  correctiveMaxAttempts?: number;
+}
+
+export interface RagRetrievalOptions {
+  multiQueryEnabled?: boolean;
+  multiQueryCount?: number;
+  fusionMethod?: RagFusionMethod;
+  hybridEnabled?: boolean;
+  maxCandidates?: number;
+  maxEvidenceBlocks?: number;
+  minScore?: number;
+  dedupeSimilarityThreshold?: number;
+}
+
+export interface RagRerankOptions {
+  enabled?: boolean;
+  strategy?: RagRerankStrategy;
+  topK?: number;
+}
+
+export interface RagSafetyOptions {
+  sanitizeRetrievedText?: boolean;
+  stripInstructionalSpans?: boolean;
+  requireEvidence?: boolean;
+}
+
+export interface RagRequestOptions {
+  policy?: RagPolicyOptions;
+  routing?: RagRoutingOptions;
+  retrieval?: RagRetrievalOptions;
+  rerank?: RagRerankOptions;
+  safety?: RagSafetyOptions;
+  outputMode?: RagOutputMode;
+}

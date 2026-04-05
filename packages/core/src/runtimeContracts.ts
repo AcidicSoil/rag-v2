@@ -1,4 +1,18 @@
 import type { RagCandidate, RagDocument, RagEvidenceBlock } from "./contracts";
+import type { RagQueryRewrite } from "./policyContracts";
+import type {
+  RagAnswerEnvelopeOutput,
+  RagDiagnostics,
+  RagExecutionRoute,
+  RagOrchestratorOutput,
+} from "./outputContracts";
+import type {
+  RagGroundingMode,
+  RagOutputMode,
+  RagRequestOptions,
+  RagRequestedRoute,
+  RagRetrievalOptions,
+} from "./requestOptions";
 
 export interface RagInlineDocumentInput {
   id: string;
@@ -15,29 +29,15 @@ export interface RagPrechunkedCandidateInput {
   metadata?: Record<string, unknown>;
 }
 
-export type RagGroundingMode =
-  | "off"
-  | "warn-on-weak-evidence"
-  | "require-evidence";
-
-export interface RagRetrievalOverrides {
-  multiQueryEnabled?: boolean;
-  multiQueryCount?: number;
-  fusionMethod?: "reciprocal-rank-fusion" | "max-score";
-  hybridEnabled?: boolean;
-  rerankEnabled?: boolean;
-  rerankTopK?: number;
-  maxEvidenceBlocks?: number;
-}
-
 export interface RagAnswerRequest {
   query: string;
   documents?: Array<RagInlineDocumentInput>;
   paths?: Array<string>;
   chunks?: Array<RagPrechunkedCandidateInput>;
-  mode?: "auto" | "full-context" | "retrieval" | "corrective";
+  mode?: RagRequestedRoute;
   groundingMode?: RagGroundingMode;
-  retrieval?: RagRetrievalOverrides;
+  retrieval?: RagRetrievalOptions;
+  options?: RagRequestOptions;
 }
 
 export interface RagSearchRequest {
@@ -45,7 +45,19 @@ export interface RagSearchRequest {
   documents?: Array<RagInlineDocumentInput>;
   paths?: Array<string>;
   chunks?: Array<RagPrechunkedCandidateInput>;
-  retrieval?: RagRetrievalOverrides;
+  retrieval?: RagRetrievalOptions;
+  options?: RagRequestOptions;
+}
+
+export interface RagPreparePromptRequest {
+  query: string;
+  documents?: Array<RagInlineDocumentInput>;
+  paths?: Array<string>;
+  chunks?: Array<RagPrechunkedCandidateInput>;
+  mode?: RagRequestedRoute;
+  groundingMode?: RagGroundingMode;
+  retrieval?: RagRetrievalOptions;
+  options?: RagRequestOptions;
 }
 
 export interface CorpusInspectRequest {
@@ -80,6 +92,14 @@ export interface RagSearchResponse {
   route?: string;
 }
 
+export interface RagPreparePromptResponse {
+  route: RagExecutionRoute;
+  preparedPrompt: string;
+  evidence: Array<RagAnswerEvidence>;
+  diagnostics: RagDiagnostics;
+  unsupportedClaimWarnings: Array<string>;
+}
+
 export interface CorpusInspectResponse {
   fileCount: number;
   chunkCount?: number;
@@ -102,6 +122,100 @@ export interface RagLoadedCorpus {
   chunkCount?: number;
 }
 
+
+export interface RagDocumentParser {
+  parse(input: {
+    documents?: Array<RagInlineDocumentInput>;
+    paths?: Array<string>;
+    chunks?: Array<RagPrechunkedCandidateInput>;
+  }): Promise<RagLoadedCorpus>;
+}
+
+export interface RagEmbeddingModelResolution {
+  modelId?: string;
+  source: "manual" | "configured" | "auto-detected" | "unavailable";
+  autoUnload?: boolean;
+}
+
+export interface RagEmbeddingModelResolver {
+  resolve(input: { options?: RagRequestOptions }): Promise<RagEmbeddingModelResolution>;
+}
+
+export interface RagSemanticRetriever {
+  search(input: {
+    query: string;
+    rewrites?: Array<RagQueryRewrite>;
+    corpus: RagLoadedCorpus;
+    options?: RagRequestOptions;
+    retrieval?: RagRetrievalOptions;
+  }): Promise<Array<RagCandidate>>;
+}
+
+export interface RagLlmRerankResult {
+  candidates: Array<RagCandidate>;
+  notes?: Array<string>;
+}
+
+export interface RagLlmReranker {
+  rerank(input: {
+    query: string;
+    candidates: Array<RagCandidate>;
+    options?: RagRequestOptions;
+  }): Promise<RagLlmRerankResult>;
+}
+
+export interface RagContextSizingResult {
+  fullContextViable: boolean;
+  estimatedTokens?: number;
+  remainingTokens?: number;
+  recommendedRoute?: RagExecutionRoute;
+}
+
+export interface RagContextSizer {
+  measure(input: {
+    query: string;
+    corpus: RagLoadedCorpus;
+    options?: RagRequestOptions;
+  }): Promise<RagContextSizingResult>;
+}
+
+export interface RagCitationEmitter {
+  emit(input: {
+    candidates: Array<RagCandidate>;
+    options?: RagRequestOptions;
+  }): Promise<Array<RagEvidenceBlock>>;
+}
+
+export interface RagAnswerComposer {
+  answer(input: {
+    query: string;
+    corpus: RagLoadedCorpus;
+    evidence: Array<RagEvidenceBlock>;
+    route: RagExecutionRoute;
+    groundingMode?: RagGroundingMode;
+    options?: RagRequestOptions;
+  }): Promise<Pick<RagAnswerEnvelopeOutput, "answer" | "confidence" | "unsupportedClaimWarnings">>;
+}
+
+export interface RagPolicyDecision {
+  allowed: boolean;
+  route?: RagExecutionRoute;
+  notes?: Array<string>;
+  unsupportedClaimWarnings?: Array<string>;
+}
+
+export interface RagPolicyEngine {
+  evaluate(input: {
+    query: string;
+    corpus: RagLoadedCorpus;
+    options?: RagRequestOptions;
+  }): Promise<RagPolicyDecision>;
+}
+
+export interface RagInspector {
+  inspect(input: { corpus: RagLoadedCorpus }): Promise<CorpusInspectResponse>;
+}
+
 export interface RagDocumentLoader {
   load(input: {
     documents?: Array<RagInlineDocumentInput>;
@@ -114,22 +228,8 @@ export interface RagRetriever {
   search(input: {
     query: string;
     corpus: RagLoadedCorpus;
-    options?: RagRetrievalOverrides;
+    options?: RagRetrievalOptions;
   }): Promise<Array<RagCandidate>>;
-}
-
-export interface RagAnswerComposer {
-  answer(input: {
-    query: string;
-    corpus: RagLoadedCorpus;
-    evidence: Array<RagEvidenceBlock>;
-    route: string;
-    groundingMode?: RagGroundingMode;
-  }): Promise<Pick<RagAnswerResponse, "answer" | "confidence" | "unsupportedClaimWarnings">>;
-}
-
-export interface RagInspector {
-  inspect(input: { corpus: RagLoadedCorpus }): Promise<CorpusInspectResponse>;
 }
 
 export interface RagMcpRuntime {
@@ -137,11 +237,37 @@ export interface RagMcpRuntime {
   retriever: RagRetriever;
   answerComposer: RagAnswerComposer;
   inspector: RagInspector;
+  documentParser?: RagDocumentParser;
+  embeddingModelResolver?: RagEmbeddingModelResolver;
+  semanticRetriever?: RagSemanticRetriever;
+  llmReranker?: RagLlmReranker;
+  contextSizer?: RagContextSizer;
+  citationEmitter?: RagCitationEmitter;
+  policyEngine?: RagPolicyEngine;
+}
+
+export interface RagOrchestratorRuntime extends RagMcpRuntime {
+  documentParser?: RagDocumentParser;
+}
+
+export interface RagOrchestratorRequest {
+  query: string;
+  documents?: Array<RagInlineDocumentInput>;
+  paths?: Array<string>;
+  chunks?: Array<RagPrechunkedCandidateInput>;
+  requestedRoute?: RagRequestedRoute;
+  options?: RagRequestOptions;
+  outputMode: RagOutputMode;
 }
 
 export interface RagToolHandlerSet {
   ragAnswer(input: RagAnswerRequest): Promise<RagAnswerResponse>;
   ragSearch(input: RagSearchRequest): Promise<RagSearchResponse>;
+  ragPreparePrompt(input: RagPreparePromptRequest): Promise<RagPreparePromptResponse>;
   corpusInspect(input: CorpusInspectRequest): Promise<CorpusInspectResponse>;
   rerankOnly(input: RerankOnlyRequest): Promise<RerankOnlyResponse>;
+}
+
+export interface RagOrchestrator {
+  run(request: RagOrchestratorRequest, runtime: RagOrchestratorRuntime): Promise<RagOrchestratorOutput>;
 }
