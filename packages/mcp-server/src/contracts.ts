@@ -178,6 +178,14 @@ export const rerankOnlyInputSchema = z.object({
   topK: z.number().int().min(1).max(20).default(5),
 });
 
+export const filesystemBrowseInputSchema = z.object({
+  path: z.string().min(1),
+  recursive: z.boolean().optional(),
+  maxDepth: z.number().int().min(0).max(32).optional(),
+  maxEntries: z.number().int().min(1).max(5000).optional(),
+  includeHidden: z.boolean().optional(),
+});
+
 export const ragEvidenceBlockSchema = z.object({
   label: z.string(),
   fileName: z.string(),
@@ -226,13 +234,34 @@ export const rerankOnlyOutputSchema = z.object({
   reasons: z.array(z.string()).optional(),
 });
 
+export const filesystemBrowseEntrySchema = z.object({
+  path: z.string(),
+  name: z.string(),
+  type: z.enum(["file", "directory"]),
+  sizeBytes: z.number().int().nonnegative().optional(),
+  extension: z.string().optional(),
+});
+
+export const filesystemBrowseOutputSchema = z.object({
+  requestedPath: z.string(),
+  resolvedPath: z.string(),
+  cwd: z.string(),
+  exists: z.boolean(),
+  type: z.enum(["file", "directory"]).optional(),
+  entries: z.array(filesystemBrowseEntrySchema),
+  truncated: z.boolean(),
+  errors: z.array(z.string()).optional(),
+});
+
 export type RagAnswerInput = z.infer<typeof ragAnswerInputSchema>;
 export type RagSearchInput = z.infer<typeof ragSearchInputSchema>;
 export type RagPreparePromptInput = z.infer<typeof ragPreparePromptInputSchema>;
 export type CorpusInspectInput = z.infer<typeof corpusInspectInputSchema>;
 export type RerankOnlyInput = z.infer<typeof rerankOnlyInputSchema>;
+export type FileSystemBrowseInput = z.infer<typeof filesystemBrowseInputSchema>;
 export type RagAnswerOutput = z.infer<typeof ragAnswerOutputSchema>;
 export type RagSearchOutput = z.infer<typeof ragSearchOutputSchema>;
 export type RagPreparePromptOutput = z.infer<typeof ragPreparePromptOutputSchema>;
 export type CorpusInspectOutput = z.infer<typeof corpusInspectOutputSchema>;
 export type RerankOnlyOutput = z.infer<typeof rerankOnlyOutputSchema>;
+export type FileSystemBrowseOutput = z.infer<typeof filesystemBrowseOutputSchema>;

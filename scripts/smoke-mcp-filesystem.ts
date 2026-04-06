@@ -26,6 +26,18 @@ async function main() {
       "Tradeoff summary\nHigher write latency is accepted to preserve failover consistency.\n",
       "utf8"
     );
+    await mkdir(path.join(tempRoot, "node_modules"));
+    await writeFile(
+      path.join(tempRoot, "node_modules", "ignored.txt"),
+      "Ignored dependency text\nThis file should not be ingested by corpus loading.\n",
+      "utf8"
+    );
+    await mkdir(path.join(tempRoot, ".git"));
+    await writeFile(
+      path.join(tempRoot, ".git", "ignored.md"),
+      "Ignored git metadata\nThis file should not be ingested by corpus loading.\n",
+      "utf8"
+    );
 
     await writeFile(
       path.join(homeTempRoot, "tilde-path.md"),
@@ -34,6 +46,27 @@ async function main() {
     );
 
     const handlers = createMcpToolHandlers(createDefaultMcpRuntime());
+
+    const browse = await handlers.filesystemBrowse({
+      path: tempRoot,
+      recursive: true,
+      maxDepth: 2,
+      maxEntries: 20,
+    });
+    assert(browse.exists, "Expected filesystem_browse to resolve the temporary root.");
+    assert(browse.type === "directory", "Expected filesystem_browse to report a directory.");
+    assert(
+      browse.entries.some((entry) => entry.name === "architecture.md"),
+      "Expected filesystem_browse to include the architecture file."
+    );
+    assert(
+      browse.entries.some((entry) => entry.name === "docs" && entry.type === "directory"),
+      "Expected filesystem_browse to include the docs directory."
+    );
+    assert(
+      browse.entries.some((entry) => entry.name === "node_modules" && entry.type === "directory"),
+      "Expected filesystem_browse to include node_modules when browsing."
+    );
 
     const inspect = await handlers.corpusInspect({
       paths: [tempRoot],
@@ -49,6 +82,10 @@ async function main() {
       search.candidates.some((candidate) => candidate.sourceName.includes("tradeoffs.txt")),
       "Expected filesystem rag_search to include the matching tradeoffs file."
     );
+    assert(
+      !search.candidates.some((candidate) => candidate.sourceName.includes("ignored.txt")),
+      "Expected filesystem rag_search to ignore files under node_modules during corpus loading."
+    );
 
     const answer = await handlers.ragAnswer({
       query: "What database does the session service use?",
@@ -61,6 +98,17 @@ async function main() {
     );
 
     const tildePath = homeTempRoot.replace(os.homedir(), "~");
+    const tildeBrowse = await handlers.filesystemBrowse({
+      path: tildePath,
+      recursive: false,
+      maxEntries: 10,
+    });
+    assert(tildeBrowse.exists, "Expected tilde-expanded filesystem_browse to resolve.");
+    assert(
+      tildeBrowse.resolvedPath === homeTempRoot,
+      "Expected tilde-expanded filesystem_browse to report the resolved home path."
+    );
+
     const tildeInspect = await handlers.corpusInspect({
       paths: [tildePath],
     });

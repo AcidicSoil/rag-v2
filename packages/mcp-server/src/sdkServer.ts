@@ -200,6 +200,33 @@ export function createOfficialMcpServer(handlers: RagToolHandlerSet) {
   );
 
   registerTool(
+    "filesystem_browse",
+    {
+      description:
+        "Browse the filesystem without ingesting it as a RAG corpus. Use this to inspect target directories before searching or answering.",
+      inputSchema: {
+        path: z.string().min(1).describe("Filesystem path to inspect"),
+        recursive: z.boolean().optional().describe("Whether to recurse into subdirectories"),
+        maxDepth: z.number().int().min(0).max(32).optional().describe("Maximum recursion depth when recursive is enabled"),
+        maxEntries: z.number().int().min(1).max(5000).optional().describe("Maximum number of entries to return"),
+        includeHidden: z.boolean().optional().describe("Whether to include hidden files and directories"),
+      } as any,
+    },
+    async (args: any) => {
+      const result = await handlers.filesystemBrowse(args);
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(result, null, 2),
+          },
+        ],
+        structuredContent: result,
+      };
+    }
+  );
+
+  registerTool(
     "corpus_inspect",
     {
       description:

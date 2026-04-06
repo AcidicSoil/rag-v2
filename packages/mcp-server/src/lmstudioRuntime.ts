@@ -14,7 +14,11 @@ import type {
 import { toRagCandidates, toRetrievalResultEntries } from "../../adapter-lmstudio/src/lmstudioCoreBridge";
 import { performModelAssistedRerank } from "../../adapter-lmstudio/src/modelRerank";
 import type { RankedRetrievalEntry } from "../../adapter-lmstudio/src/types/rerank";
-import { discoverSupportedTextFiles, resolveUserPath } from "./pathResolution";
+import {
+  browseFileSystem,
+  discoverSupportedTextFiles,
+  resolveUserPath,
+} from "./pathResolution";
 
 function estimateTokens(value: string) {
   return Math.ceil(value.trim().length / 4);
@@ -226,6 +230,11 @@ export async function createLmStudioMcpRuntime(): Promise<RagMcpRuntime> {
         };
       },
     },
+    browser: {
+      async browse(input) {
+        return browseFileSystem(input);
+      },
+    },
   };
 }
 
@@ -237,8 +246,13 @@ async function loadLmStudioPathDocuments(
   const fileHandles: Array<FileHandle> = [];
 
   for (const inputPath of paths) {
-    const discoveredPaths = await discoverSupportedTextFiles(inputPath);
-    for (const discoveredPath of discoveredPaths) {
+    const discovery = await discoverSupportedTextFiles(inputPath, {
+      maxEntries: 2000,
+      includeHidden: false,
+      maxDepth: 8,
+      ignoreDirectories: true,
+    });
+    for (const discoveredPath of discovery.paths) {
       const fileHandle = await client.files.prepareFile(discoveredPath);
       const parsed = await client.files.parseDocument(fileHandle);
       documents.push({
@@ -250,6 +264,8 @@ async function loadLmStudioPathDocuments(
           discoveredPath,
           fileHandle,
           sourceType: "lmstudio-path",
+          discoveryTruncated: discovery.truncated,
+          discoveryErrors: discovery.errors,
         },
       });
       fileHandles.push(fileHandle);

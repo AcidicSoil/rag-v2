@@ -3,7 +3,11 @@ import path from "node:path";
 import type { RagEvidenceBlock, RagDocument } from "../../core/src/contracts";
 import { lexicalRetrieveFromDocuments } from "../../core/src/localRetrieval";
 import type { RagMcpRuntime } from "../../core/src/runtimeContracts";
-import { discoverSupportedTextFiles, resolveUserPath } from "./pathResolution";
+import {
+  browseFileSystem,
+  discoverSupportedTextFiles,
+  resolveUserPath,
+} from "./pathResolution";
 
 function estimateTokens(value: string) {
   return Math.ceil(value.trim().length / 4);
@@ -64,7 +68,12 @@ export function createDefaultMcpRuntime(): RagMcpRuntime {
     answerComposer: {
       async answer({ query, evidence, route, groundingMode }) {
         return {
-          answer: buildStubAnswer(query, evidence, route, groundingMode ?? "warn-on-weak-evidence"),
+          answer: buildStubAnswer(
+            query,
+            evidence,
+            route,
+            groundingMode ?? "warn-on-weak-evidence"
+          ),
           confidence:
             evidence.length > 0 ? Math.min(0.9, 0.45 + evidence.length * 0.1) : 0.2,
           unsupportedClaimWarnings:
@@ -92,6 +101,11 @@ export function createDefaultMcpRuntime(): RagMcpRuntime {
         };
       },
     },
+    browser: {
+      async browse(input) {
+        return browseFileSystem(input);
+      },
+    },
   };
 }
 
@@ -99,8 +113,13 @@ async function loadDocumentsFromPaths(paths: Array<string>): Promise<Array<RagDo
   const results: Array<RagDocument> = [];
 
   for (const inputPath of paths) {
-    const discoveredPaths = await discoverSupportedTextFiles(inputPath);
-    for (const discoveredPath of discoveredPaths) {
+    const discovery = await discoverSupportedTextFiles(inputPath, {
+      maxEntries: 2000,
+      includeHidden: false,
+      maxDepth: 8,
+      ignoreDirectories: true,
+    });
+    for (const discoveredPath of discovery.paths) {
       const content = await readTextFile(discoveredPath);
       if (!content) {
         continue;
@@ -114,6 +133,8 @@ async function loadDocumentsFromPaths(paths: Array<string>): Promise<Array<RagDo
           absolutePath: resolveUserPath(inputPath),
           discoveredPath,
           sourceType: "filesystem-path",
+          discoveryTruncated: discovery.truncated,
+          discoveryErrors: discovery.errors,
         },
       });
     }

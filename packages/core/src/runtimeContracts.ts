@@ -72,6 +72,22 @@ export interface RerankOnlyRequest {
   topK?: number;
 }
 
+export interface FileSystemBrowseRequest {
+  path: string;
+  recursive?: boolean;
+  maxDepth?: number;
+  maxEntries?: number;
+  includeHidden?: boolean;
+}
+
+export interface FileSystemBrowseEntry {
+  path: string;
+  name: string;
+  type: "file" | "directory";
+  sizeBytes?: number;
+  extension?: string;
+}
+
 export interface RagAnswerEvidence {
   label: string;
   fileName: string;
@@ -112,6 +128,17 @@ export interface CorpusInspectResponse {
 export interface RerankOnlyResponse {
   candidates: Array<RagPrechunkedCandidateInput>;
   reasons?: Array<string>;
+}
+
+export interface FileSystemBrowseResponse {
+  requestedPath: string;
+  resolvedPath: string;
+  cwd: string;
+  exists: boolean;
+  type?: "file" | "directory";
+  entries: Array<FileSystemBrowseEntry>;
+  truncated: boolean;
+  errors?: Array<string>;
 }
 
 export interface RagLoadedCorpus {
@@ -216,6 +243,10 @@ export interface RagInspector {
   inspect(input: { corpus: RagLoadedCorpus }): Promise<CorpusInspectResponse>;
 }
 
+export interface RagFileSystemBrowser {
+  browse(input: FileSystemBrowseRequest): Promise<FileSystemBrowseResponse>;
+}
+
 export interface RagDocumentLoader {
   load(input: {
     documents?: Array<RagInlineDocumentInput>;
@@ -237,6 +268,7 @@ export interface RagMcpRuntime {
   retriever: RagRetriever;
   answerComposer: RagAnswerComposer;
   inspector: RagInspector;
+  browser: RagFileSystemBrowser;
   documentParser?: RagDocumentParser;
   embeddingModelResolver?: RagEmbeddingModelResolver;
   semanticRetriever?: RagSemanticRetriever;
@@ -266,6 +298,7 @@ export interface RagToolHandlerSet {
   ragPreparePrompt(input: RagPreparePromptRequest): Promise<RagPreparePromptResponse>;
   corpusInspect(input: CorpusInspectRequest): Promise<CorpusInspectResponse>;
   rerankOnly(input: RerankOnlyRequest): Promise<RerankOnlyResponse>;
+  filesystemBrowse(input: FileSystemBrowseRequest): Promise<FileSystemBrowseResponse>;
 }
 
 export interface RagOrchestrator {

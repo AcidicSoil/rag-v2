@@ -13,11 +13,13 @@ import type {
 } from "../../core/src/runtimeContracts";
 import {
   corpusInspectInputSchema,
+  filesystemBrowseInputSchema,
   ragAnswerInputSchema,
   ragPreparePromptInputSchema,
   ragSearchInputSchema,
   rerankOnlyInputSchema,
   type CorpusInspectInput,
+  type FileSystemBrowseInput,
   type RagAnswerInput,
   type RagPreparePromptInput,
   type RagSearchInput,
@@ -133,6 +135,11 @@ export function createMcpToolHandlers(runtime: RagMcpRuntime): RagToolHandlerSet
             `Rank ${index + 1}: overlap=${candidate.features.lexicalOverlap.toFixed(2)}, heading=${candidate.features.headingMatch.toFixed(2)}, diversityPenalty=${candidate.features.diversityPenalty.toFixed(2)}`
         ),
       };
+    },
+
+    async filesystemBrowse(input: FileSystemBrowseInput) {
+      const parsed = filesystemBrowseInputSchema.parse(input);
+      return runtime.browser.browse(parsed);
     },
   };
 }
