@@ -1,2 +1,4 @@
 .lmstudio
 node_modules
+/cache
+/project.local.yml
