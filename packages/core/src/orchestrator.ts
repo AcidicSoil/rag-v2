@@ -340,10 +340,21 @@ async function shapeLargeCorpusSummaryOutput(
   _runtime: RagOrchestratorRuntime
 ): Promise<RagOrchestratorOutput> {
   const summaryDocuments = corpus.analysis?.summaryDocuments ?? [];
+  const selectedSummaryDocuments = selectSummaryDocumentsForQuery(
+    query,
+    summaryDocuments,
+    options.retrieval?.maxEvidenceBlocks ?? DEFAULT_MAX_EVIDENCE_BLOCKS
+  );
+  if (selectedSummaryDocuments.length !== summaryDocuments.length) {
+    diagnostics.notes?.push(
+      `Selected ${selectedSummaryDocuments.length}/${summaryDocuments.length} summary documents for ${route} context.`
+    );
+  }
+
   const summaryCorpus: RagLoadedCorpus = {
     ...corpus,
-    documents: summaryDocuments,
-    estimatedTokens: summaryDocuments.reduce(
+    documents: selectedSummaryDocuments,
+    estimatedTokens: selectedSummaryDocuments.reduce(
       (sum, document) => sum + Math.ceil(document.content.length / 4),
       0
     ),
@@ -353,13 +364,29 @@ async function shapeLargeCorpusSummaryOutput(
     summaryCorpus,
     options.policy?.groundingMode ?? "warn-on-weak-evidence"
   );
+  const summaryCandidates = lexicalRetrieveFromDocuments(
+    query,
+    selectedSummaryDocuments,
+    options.retrieval?.maxEvidenceBlocks ?? DEFAULT_MAX_EVIDENCE_BLOCKS
+  );
+  const fallbackSummaryCandidates =
+    summaryCandidates.length > 0
+      ? summaryCandidates
+      : selectedSummaryDocuments.map((document, index) => ({
+          sourceId: document.id,
+          sourceName: document.name,
+          content: document.content,
+          score: Math.max(0.1, 1 - index * 0.05),
+          metadata: document.metadata,
+        }));
+  const summaryEvidence = buildRagEvidenceBlocks(fallbackSummaryCandidates);
 
   if (options.outputMode === "prepared-prompt") {
     return {
       mode: "prepared-prompt",
       route,
       preparedPrompt,
-      evidence: [],
+      evidence: summaryEvidence,
       diagnostics,
       unsupportedClaimWarnings,
     };
@@ -369,8 +396,8 @@ async function shapeLargeCorpusSummaryOutput(
     return {
       mode: "search-results",
       route,
-      candidates: [],
-      evidence: [],
+      candidates: fallbackSummaryCandidates,
+      evidence: summaryEvidence,
       diagnostics,
       unsupportedClaimWarnings,
     };
@@ -379,7 +406,9 @@ async function shapeLargeCorpusSummaryOutput(
   const answer = [
     `Large-corpus ${route} mode selected for: ${query}`,
     corpus.analysis?.notes.join(" ") ?? "",
-    ...summaryDocuments.slice(0, 3).map((document) => `${document.name}: ${document.content}`),
+    ...selectedSummaryDocuments
+      .slice(0, 3)
+      .map((document) => `${document.name}: ${document.content}`),
   ]
     .filter(Boolean)
     .join(" ");
@@ -389,10 +418,10 @@ async function shapeLargeCorpusSummaryOutput(
     route,
     answer,
     preparedPrompt,
-    evidence: [],
+    evidence: summaryEvidence,
     diagnostics,
     unsupportedClaimWarnings,
-    confidence: summaryDocuments.length > 0 ? 0.55 : 0.2,
+    confidence: selectedSummaryDocuments.length > 0 ? 0.55 : 0.2,
     groundingMode: options.policy?.groundingMode,
   };
 }
@@ -746,6 +775,118 @@ function buildPreparedPrompt(
       )
       .join("\n\n"),
   ].join("\n\n");
+}
+
+function selectSummaryDocumentsForQuery(
+  query: string,
+  summaryDocuments: RagLoadedCorpus["documents"],
+  maxDocuments: number
+): RagLoadedCorpus["documents"] {
+  if (summaryDocuments.length <= maxDocuments) {
+    return summaryDocuments;
+  }
+
+  const normalizedQuery = query.toLowerCase();
+  const topicIntent = /\b(theme|themes|topic|topics|pattern|patterns|subject|subjects|dominant)\b/i.test(query);
+  const timeIntent = /\b(time|timeline|timing|when|date|dates|day|days|month|months|year|years|recent|earliest|latest|period)\b/i.test(query);
+  const entityIntent = /\b(who|user|users|role|roles|conversation|conversations|session|sessions|message|messages|participant|participants|entity|entities|id|ids)\b/i.test(query);
+  const inventoryIntent = /\b(overall|summary|summarize|high-level|inventory|what is in|what's in|contain|across)\b/i.test(query);
+
+  const selected: RagLoadedCorpus["documents"] = [];
+  const seen = new Set<string>();
+  const addDocument = (document: RagLoadedCorpus["documents"][number] | undefined) => {
+    if (!document || seen.has(document.id)) {
+      return;
+    }
+    selected.push(document);
+    seen.add(document.id);
+  };
+
+  const bySourceType = (sourceType: string) =>
+    summaryDocuments.filter((document) => document.metadata?.sourceType === sourceType);
+
+  const prioritizedSourceTypes = [
+    inventoryIntent ? "structured-file-summary" : undefined,
+    topicIntent || inventoryIntent ? "structured-topic-summary" : undefined,
+    timeIntent || inventoryIntent ? "structured-time-summary" : undefined,
+    entityIntent || inventoryIntent ? "structured-entity-summary" : undefined,
+    "file-synopsis",
+    "directory-manifest",
+  ].filter((value): value is string => Boolean(value));
+
+  for (const sourceType of prioritizedSourceTypes) {
+    const ranked = bySourceType(sourceType).sort((left, right) => {
+      const leftScore = computeSummaryDocumentPreferenceScore(left, normalizedQuery);
+      const rightScore = computeSummaryDocumentPreferenceScore(right, normalizedQuery);
+      return rightScore - leftScore;
+    });
+    for (const document of ranked) {
+      addDocument(document);
+      if (selected.length >= maxDocuments) {
+        return selected;
+      }
+    }
+  }
+
+  const lexicalDocuments = lexicalRetrieveFromDocuments(
+    query,
+    summaryDocuments,
+    maxDocuments * 2
+  )
+    .map((candidate) =>
+      summaryDocuments.find((document) => document.id === candidate.sourceId)
+    )
+    .filter((document): document is RagLoadedCorpus["documents"][number] => Boolean(document));
+  for (const document of lexicalDocuments) {
+    addDocument(document);
+    if (selected.length >= maxDocuments) {
+      return selected;
+    }
+  }
+
+  for (const document of summaryDocuments) {
+    addDocument(document);
+    if (selected.length >= maxDocuments) {
+      break;
+    }
+  }
+
+  return selected;
+}
+
+function computeSummaryDocumentPreferenceScore(
+  document: RagLoadedCorpus["documents"][number],
+  normalizedQuery: string
+): number {
+  const sourceType = typeof document.metadata?.sourceType === "string"
+    ? document.metadata.sourceType
+    : "";
+  const content = `${document.name}\n${document.content}`.toLowerCase();
+  let score = 0;
+
+  if (sourceType === "structured-topic-summary" && /\b(theme|themes|topic|topics|pattern|patterns|subject|subjects|dominant)\b/.test(normalizedQuery)) {
+    score += 3;
+  }
+  if (sourceType === "structured-time-summary" && /\b(time|timeline|timing|when|date|dates|day|days|month|months|year|years|recent|earliest|latest|period)\b/.test(normalizedQuery)) {
+    score += 3;
+  }
+  if (sourceType === "structured-entity-summary" && /\b(who|user|users|role|roles|conversation|conversations|session|sessions|message|messages|participant|participants|entity|entities|id|ids)\b/.test(normalizedQuery)) {
+    score += 3;
+  }
+  if (sourceType === "structured-file-summary" && /\b(overall|summary|summarize|high-level|inventory|contain|across)\b/.test(normalizedQuery)) {
+    score += 2;
+  }
+  if (sourceType === "file-synopsis") {
+    score += 1;
+  }
+
+  for (const token of normalizedQuery.split(/[^a-z0-9]+/).filter((token) => token.length > 2)) {
+    if (content.includes(token)) {
+      score += 0.5;
+    }
+  }
+
+  return score;
 }
 
 function buildFullContextPrompt(
