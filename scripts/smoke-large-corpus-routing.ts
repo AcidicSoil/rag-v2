@@ -18,10 +18,22 @@ async function main() {
   try {
     const exportDir = path.join(tempRoot, "official-export");
     await fs.mkdir(exportDir, { recursive: true });
-    await fs.writeFile(path.join(exportDir, "chat.html"), "<html><body><h1>Chat export</h1><p>Conversation summary.</p></body></html>");
-    await fs.writeFile(path.join(exportDir, "image-1.png"), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
-    await fs.writeFile(path.join(exportDir, "image-2.jpg"), Buffer.from([0xff, 0xd8, 0xff, 0xe0]));
-    await fs.writeFile(path.join(exportDir, "image-3.webp"), Buffer.from("RIFFWEBP"));
+    await fs.writeFile(
+      path.join(exportDir, "chat.html"),
+      "<html><body><h1>Chat export</h1><p>Conversation summary.</p></body></html>"
+    );
+    await fs.writeFile(
+      path.join(exportDir, "image-1.png"),
+      Buffer.from([0x89, 0x50, 0x4e, 0x47])
+    );
+    await fs.writeFile(
+      path.join(exportDir, "image-2.jpg"),
+      Buffer.from([0xff, 0xd8, 0xff, 0xe0])
+    );
+    await fs.writeFile(
+      path.join(exportDir, "image-3.webp"),
+      Buffer.from("RIFFWEBP")
+    );
 
     const globalResult = await orchestrateRagRequest(
       {
@@ -32,7 +44,10 @@ async function main() {
       runtime
     );
 
-    assert(globalResult.route === "global-summary", "Expected overview question on directory to use global-summary route.");
+    assert(
+      globalResult.route === "global-summary",
+      "Expected overview question on directory to use global-summary route."
+    );
     assert(
       globalResult.preparedPrompt.includes("manifest:"),
       "Expected prepared prompt to include generated directory manifest context."
@@ -47,7 +62,8 @@ async function main() {
     const targetLine = JSON.stringify({
       conversation_id: "conv-999",
       role: "assistant",
-      content: "Target tool usage entry with export routing evidence and hierarchy marker.",
+      content:
+        "Target tool usage entry with export routing evidence and hierarchy marker.",
     });
     const largeJsonl = [
       ...Array.from({ length: 8500 }, () => repeatedLine),
@@ -58,7 +74,8 @@ async function main() {
 
     const localResult = await orchestrateRagRequest(
       {
-        query: "Find the specific export routing evidence and hierarchy marker entry in this file.",
+        query:
+          "Find the specific export routing evidence and hierarchy marker entry in this file.",
         paths: [jsonlPath],
         outputMode: "search-results",
       },
@@ -77,18 +94,23 @@ async function main() {
       localResult.diagnostics.notes?.some((note) => note.includes("Built hierarchical index")),
       "Expected diagnostics to report hierarchical index construction."
     );
-    assert(localResult.candidates.length > 0, "Expected hierarchical retrieval to produce candidates.");
     assert(
-      localResult.candidates.some((candidate) =>
-        candidate.content.includes("hierarchy marker") &&
-        candidate.metadata?.retrievalMode === "hierarchical-retrieval"
+      localResult.candidates.length > 0,
+      "Expected hierarchical retrieval to produce candidates."
+    );
+    assert(
+      localResult.candidates.some(
+        (candidate) =>
+          candidate.content.includes("hierarchy marker") &&
+          candidate.metadata?.retrievalMode === "hierarchical-retrieval"
       ),
       "Expected hierarchical retrieval to surface the target chunk with hierarchical metadata."
     );
 
     const cachedLocalResult = await orchestrateRagRequest(
       {
-        query: "Find the specific export routing evidence and hierarchy marker entry in this file.",
+        query:
+          "Find the specific export routing evidence and hierarchy marker entry in this file.",
         paths: [jsonlPath],
         outputMode: "search-results",
       },
@@ -96,8 +118,27 @@ async function main() {
     );
 
     assert(
-      cachedLocalResult.diagnostics.notes?.some((note) => note.includes("Reused cached large-corpus analysis")),
+      cachedLocalResult.diagnostics.notes?.some((note) =>
+        note.includes("Reused cached large-corpus analysis")
+      ),
       "Expected repeated large-corpus request to reuse cached analysis."
+    );
+
+    const correctiveResult = await orchestrateRagRequest(
+      {
+        query:
+          "Find the hierarchy marker entry and the nonexistent sentinel field in this file.",
+        paths: [jsonlPath],
+        outputMode: "search-results",
+      },
+      runtime
+    );
+
+    assert(
+      correctiveResult.diagnostics.notes?.some((note) =>
+        note.includes("Weak hierarchical evidence triggered a corrective retry")
+      ),
+      "Expected weak hierarchical evidence to trigger a corrective retry."
     );
 
     console.log("Large-corpus routing smoke test passed.");

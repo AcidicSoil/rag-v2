@@ -410,26 +410,53 @@ async function runRetrievalFlow(
   let attempt = 0;
   let finalCandidates: Array<RagCandidate> = [];
   let warnings: Array<string> = [];
+  const maxAttempts = options.routing?.correctiveMaxAttempts ?? DEFAULT_CORRECTIVE_MAX_ATTEMPTS;
 
-  while (attempt <= (options.routing?.correctiveMaxAttempts ?? DEFAULT_CORRECTIVE_MAX_ATTEMPTS)) {
-    const candidates = await retrieveCandidates(query, corpus, activeRewrites, options, runtime, activeRoute);
-    const filtered = candidates.filter((candidate) => candidate.score >= (retrievalOptions.minScore ?? 0));
-    finalCandidates = await finalizeCandidates(query, filtered, options, runtime, diagnostics);
+  while (attempt <= maxAttempts) {
+    const candidates = await retrieveCandidates(
+      query,
+      corpus,
+      activeRewrites,
+      options,
+      runtime,
+      activeRoute
+    );
+    const filtered = candidates.filter(
+      (candidate) => candidate.score >= (retrievalOptions.minScore ?? 0)
+    );
+    finalCandidates = await finalizeCandidates(
+      query,
+      filtered,
+      options,
+      runtime,
+      diagnostics
+    );
 
-    if (activeRoute !== "corrective") {
+    const shouldAssessRetry =
+      activeRoute === "corrective" ||
+      activeRoute === "hierarchical-retrieval" ||
+      (activeRoute === "retrieval" && Boolean(corpus.analysis?.hierarchicalIndex));
+
+    if (!shouldAssessRetry) {
       break;
     }
 
     const assessment = assessCoreCorrectiveNeed(query, finalCandidates, {
-      minAverageScore: DEFAULT_CORRECTIVE_MIN_SCORE,
+      minAverageScore:
+        activeRoute === "hierarchical-retrieval"
+          ? DEFAULT_CORRECTIVE_MIN_SCORE + 0.05
+          : DEFAULT_CORRECTIVE_MIN_SCORE,
       minAspectCoverage: DEFAULT_CORRECTIVE_MIN_ASPECT_COVERAGE,
-      minEntryCount: Math.min(2, retrievalOptions.maxEvidenceBlocks ?? DEFAULT_MAX_EVIDENCE_BLOCKS),
+      minEntryCount: Math.min(
+        2,
+        retrievalOptions.maxEvidenceBlocks ?? DEFAULT_MAX_EVIDENCE_BLOCKS
+      ),
     });
     diagnostics.notes?.push(
-      `Corrective assessment attempt ${attempt + 1}: retry=${assessment.shouldRetry}, coverage=${assessment.matchedAspectCount}/${assessment.totalAspectCount}, avgScore=${assessment.averageScore.toFixed(2)}.`
+      `Corrective assessment attempt ${attempt + 1} on ${activeRoute}: retry=${assessment.shouldRetry}, coverage=${assessment.matchedAspectCount}/${assessment.totalAspectCount}, avgScore=${assessment.averageScore.toFixed(2)}.`
     );
 
-    if (!assessment.shouldRetry || attempt >= (options.routing?.correctiveMaxAttempts ?? DEFAULT_CORRECTIVE_MAX_ATTEMPTS)) {
+    if (!assessment.shouldRetry || attempt >= maxAttempts) {
       break;
     }
 
@@ -438,6 +465,23 @@ async function runRetrievalFlow(
       Math.max(retrievalOptions.multiQueryCount ?? DEFAULT_MULTI_QUERY_COUNT, 4)
     ).rewrites;
     warnings = mergeWarnings(warnings, assessment.reasons);
+
+    if (activeRoute === "retrieval" && corpus.analysis?.hierarchicalIndex) {
+      diagnostics.notes?.push(
+        "Weak retrieval evidence triggered a hierarchical corrective retry."
+      );
+      activeRoute = "hierarchical-retrieval";
+    } else if (activeRoute === "hierarchical-retrieval") {
+      diagnostics.notes?.push(
+        "Weak hierarchical evidence triggered a corrective retry with expanded rewrites."
+      );
+    } else {
+      diagnostics.notes?.push(
+        "Weak evidence triggered a corrective retry with expanded rewrites."
+      );
+      activeRoute = "corrective";
+    }
+
     attempt += 1;
   }
 
