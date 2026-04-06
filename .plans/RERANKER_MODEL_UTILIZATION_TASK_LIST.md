@@ -7,7 +7,7 @@
 - `packages/core/src/requestOptions.ts`
 - `packages/adapter-lmstudio/src/config.ts`
 - `packages/adapter-lmstudio/src/orchestratorRuntime.ts`
-- `packages/adapter-lmstudio/src/modelRerank.ts`
+- `packages/lmstudio-shared/src/modelRerank.ts`
 - `packages/mcp-server/src/lmstudioRuntime.ts`
 - `packages/mcp-server/src/contracts.ts`
 - `packages/mcp-server/src/handlers.ts`

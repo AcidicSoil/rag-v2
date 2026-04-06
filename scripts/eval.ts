@@ -10,7 +10,7 @@ import { lexicalRetrieve } from "../packages/adapter-lmstudio/src/lexicalRetriev
 import { rerankRetrievalEntries } from "../packages/adapter-lmstudio/src/rerank";
 import { buildGroundingInstruction, sanitizeRetrievedText } from "../packages/adapter-lmstudio/src/safety";
 import type { EvalCase } from "../packages/adapter-lmstudio/src/types/eval";
-import type { RerankStrategy } from "../packages/adapter-lmstudio/src/types/rerank";
+import type { RerankStrategy } from "../packages/lmstudio-shared/src/rerankTypes";
 import type { StrictGroundingMode } from "../packages/adapter-lmstudio/src/types/safety";
 
 function assert(condition: unknown, message: string): asserts condition {

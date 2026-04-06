@@ -8,6 +8,7 @@
 The repository uses a workspace layout:
 
 - `packages/core`: transport-agnostic retrieval, ranking, evidence, and policy logic
+- `packages/lmstudio-shared`: LM Studio-specific shared helpers reused by plugin and MCP runtimes
 - `packages/adapter-lmstudio`: LM Studio plugin adapter and prompt-preprocessor flow
 - `packages/mcp-server`: MCP server adapter and stdio entrypoint
 
@@ -96,6 +97,7 @@ Grounding modes currently include:
 ```text
 packages/
   core/
+  lmstudio-shared/
   adapter-lmstudio/
   mcp-server/
 src/
@@ -229,12 +231,14 @@ npm run eval
 npm run typecheck:core
 npm run typecheck:adapter
 npm run typecheck:mcp
+npm run typecheck:lmstudio-shared
 npm run typecheck:packages
 ```
 
 - `typecheck:core` validates the shared core package
 - `typecheck:adapter` validates the LM Studio adapter package
 - `typecheck:mcp` validates the MCP package
+- `typecheck:lmstudio-shared` validates the LM Studio shared helper package
 - `typecheck:packages` validates all workspace packages
 - `typecheck` validates all packages plus the root plugin shim
 
@@ -254,6 +258,7 @@ npm run smoke:core-policy
 npm run smoke:mcp
 npm run smoke:mcp-filesystem
 npm run smoke:model-rerank
+npm run smoke:lmstudio-model-resolution
 ```
 
 These are intended to verify deterministic slices of the pipeline quickly.
@@ -300,34 +305,43 @@ The LM Studio plugin exposes configuration in the LM Studio UI.
 - Gate Confidence Threshold
 - Ambiguous Query Behavior
 
-### Multi-query settings
+### Multi-query and retrieval settings
 - Multi-Query Retrieval
 - Multi-Query Count
 - Fusion Method
 - Max Candidates Before Rerank
+- Max Evidence Blocks
+- Dedupe Similarity Threshold
 
 ### Hybrid retrieval settings
 - Hybrid Retrieval
-- Lexical Weight
-- Semantic Weight
+- Hybrid Semantic Weight
+- Hybrid Lexical Weight
 - Hybrid Candidate Count
 
-### Reranking and evidence settings
-- Rerank Fused Candidates
+### Reranking settings
+- Rerank Retrieved Chunks
 - Rerank Top K
 - Rerank Strategy
-- Evidence Dedupe Threshold
-- Max Evidence Blocks
+- Model-Assisted Rerank
+- Model Rerank Top K
+- Rerank Model Source
+- Manual Rerank Model ID
+
+### Corrective retrieval settings
+- Corrective Retrieval
+- Corrective Max Attempts
 
 ### Safety and grounding settings
 - Sanitize Retrieved Text
-- Strip Instruction-Like Spans
+- Strip Instructional Spans
 - Strict Grounding Mode
 
 ## Key files
 
 - `packages/adapter-lmstudio/src/promptPreprocessor.ts`: main LM Studio prompt-preprocessor pipeline
-- `packages/adapter-lmstudio/src/`: LM Studio adapter logic and local types
+- `packages/adapter-lmstudio/src/`: LM Studio adapter logic and adapter-only shaping/types
+- `packages/lmstudio-shared/src/`: LM Studio shared model resolution, rerank, and bridge helpers used by plugin and MCP runtimes
 - `packages/core/src/`: shared retrieval, ranking, evidence, and policy logic
 - `packages/mcp-server/src/`: MCP contracts, handlers, runtimes, and stdio server entrypoints
 - `src/index.ts`: intentional repo-root LM Studio plugin entry shim
@@ -342,7 +356,7 @@ The repository currently includes:
 - answerability gating
 - deterministic multi-query retrieval
 - optional hybrid semantic-plus-lexical retrieval
-- fusion and heuristic reranking
+- fusion, heuristic reranking, and optional model-assisted reranking
 - evidence dedupe and packaging
 - retrieved-text sanitization and grounding controls
 - smoke tests for major pipeline slices

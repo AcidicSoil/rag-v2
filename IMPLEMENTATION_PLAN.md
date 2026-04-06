@@ -433,8 +433,8 @@ Select evidence that is sufficient and complementary, not just topically similar
 
 #### Files to add
 
-- `src/rerank.ts`
-- `src/types/rerank.ts`
+- `packages/adapter-lmstudio/src/rerank.ts`
+- `packages/lmstudio-shared/src/rerankTypes.ts`
 
 #### Reranking strategy
 
