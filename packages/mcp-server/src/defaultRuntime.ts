@@ -154,6 +154,8 @@ async function loadDocumentsFromPaths(paths: Array<string>): Promise<Array<RagDo
         metadata: {
           absolutePath: resolveUserPath(inputPath),
           discoveredPath,
+          path: discoveredPath,
+          extension: path.extname(discoveredPath).toLowerCase(),
           sourceType: "filesystem-path",
           discoveryTruncated: discovery.truncated,
           discoveryErrors: discovery.errors,

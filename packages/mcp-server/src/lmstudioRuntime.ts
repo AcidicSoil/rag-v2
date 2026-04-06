@@ -321,6 +321,8 @@ async function loadLmStudioPathDocuments(
         metadata: {
           absolutePath: resolveUserPath(inputPath),
           discoveredPath,
+          path: discoveredPath,
+          extension: path.extname(discoveredPath).toLowerCase(),
           fileHandle,
           sourceType: "lmstudio-path",
           discoveryTruncated: discovery.truncated,

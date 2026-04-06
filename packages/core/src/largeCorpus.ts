@@ -425,11 +425,13 @@ function buildDocumentSynopsis(document: RagDocument): RagFileSynopsis {
   const format = detectFormat(extension);
   const sizeBytes = Buffer.byteLength(document.content, "utf8");
   const textLike = looksTextLike(document.content);
-  const sampleHead = truncateForMetadata(document.content.slice(0, 8000));
-  const sampleTail =
+  const rawHead = document.content.slice(0, 8000);
+  const rawTail =
     sizeBytes >= LARGE_FILE_BYTES
-      ? truncateForMetadata(document.content.slice(Math.max(0, document.content.length - 8000)))
+      ? document.content.slice(Math.max(0, document.content.length - 8000))
       : undefined;
+  const sampleHead = truncateForMetadata(rawHead);
+  const sampleTail = rawTail ? truncateForMetadata(rawTail) : undefined;
 
   return {
     path: inferredPath,
@@ -439,7 +441,7 @@ function buildDocumentSynopsis(document: RagDocument): RagFileSynopsis {
     textLike,
     oversized: sizeBytes >= LARGE_FILE_BYTES,
     format,
-    synopsis: summarizeSample(format, sampleHead, sampleTail),
+    synopsis: summarizeSample(format, rawHead, rawTail),
     sampleStrategy: sizeBytes >= HUGE_FILE_BYTES ? "bounded-head-tail" : "bounded-head",
     sampleHead,
     sampleTail,
@@ -522,6 +524,10 @@ function summarizeSample(
 
   if (format === "jsonl") {
     parts.push("Structured as line-delimited JSON.");
+    const schemaHint = summarizeJsonlSchema(head, tail);
+    if (schemaHint) {
+      parts.push(schemaHint);
+    }
   } else if (format === "json") {
     parts.push("Structured as JSON.");
   } else if (format === "html") {
@@ -552,6 +558,42 @@ function summarizeTextWindow(text?: string): string | undefined {
     return undefined;
   }
   return truncateForMetadata(cleaned, 280);
+}
+
+function summarizeJsonlSchema(head?: string, tail?: string): string | undefined {
+  const fieldCounts = new Map<string, number>();
+  for (const window of [head, tail]) {
+    if (!window) {
+      continue;
+    }
+    for (const line of window.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed) {
+        continue;
+      }
+      try {
+        const parsed = JSON.parse(trimmed) as Record<string, unknown>;
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+          continue;
+        }
+        for (const key of Object.keys(parsed)) {
+          fieldCounts.set(key, (fieldCounts.get(key) ?? 0) + 1);
+        }
+      } catch {
+        continue;
+      }
+    }
+  }
+
+  if (fieldCounts.size === 0) {
+    return undefined;
+  }
+
+  const topFields = [...fieldCounts.entries()]
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+    .slice(0, 8)
+    .map(([field]) => field);
+  return `Observed fields: ${topFields.join(", ")}.`;
 }
 
 function truncateForMetadata(text?: string, maxLength = 500): string | undefined {

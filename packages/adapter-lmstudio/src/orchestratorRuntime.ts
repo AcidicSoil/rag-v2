@@ -155,6 +155,10 @@ export function createLmStudioAdapterRuntime(
       content: document.content,
       metadata: {
         fileHandle: document.file,
+        path: document.file.name,
+        extension: document.file.name.includes(".")
+          ? `.${document.file.name.split(".").pop()!.toLowerCase()}`
+          : undefined,
         sourceType: "lmstudio-file-handle",
       },
     }));

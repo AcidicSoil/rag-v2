@@ -87,6 +87,10 @@ async function main() {
       "Expected prepared prompt to include generated file synopsis context for attached documents."
     );
     assert(
+      attachedDocumentResult.preparedPrompt.includes("Observed fields:"),
+      "Expected attached-document synopsis context to expose observed JSONL fields."
+    );
+    assert(
       attachedDocumentResult.diagnostics.notes?.some((note) => note.includes("document analysis classified")),
       "Expected diagnostics to record document-backed large-corpus analysis."
     );
@@ -143,6 +147,14 @@ async function main() {
           candidate.metadata?.retrievalMode === "hierarchical-retrieval"
       ),
       "Expected hierarchical retrieval to surface the target chunk with hierarchical metadata."
+    );
+    assert(
+      localResult.candidates.some(
+        (candidate) =>
+          Array.isArray(candidate.metadata?.structuredFields) &&
+          String(candidate.metadata?.structuredSummary ?? "").includes("conversation_id=")
+      ),
+      "Expected JSONL retrieval chunks to carry structured field metadata."
     );
 
     const cachedLocalResult = await orchestrateRagRequest(

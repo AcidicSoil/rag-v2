@@ -217,6 +217,13 @@ function scoreChunk(
 }
 
 export function chunkDocument(document: RagDocument): Array<ChunkCandidate> {
+  if (isJsonlDocument(document)) {
+    const structuredChunks = chunkJsonlDocument(document);
+    if (structuredChunks.length > 0) {
+      return structuredChunks;
+    }
+  }
+
   const lines = document.content.split(/\r?\n/);
   const chunks: Array<ChunkCandidate> = [];
   let primaryHeading = document.name;
@@ -279,6 +286,54 @@ export function chunkDocument(document: RagDocument): Array<ChunkCandidate> {
   return chunks;
 }
 
+function chunkJsonlDocument(document: RagDocument): Array<ChunkCandidate> {
+  const lines = document.content.split(/\r?\n/).filter((line) => line.trim().length > 0);
+  const chunks: Array<ChunkCandidate> = [];
+
+  for (const [index, line] of lines.entries()) {
+    try {
+      const parsed = JSON.parse(line) as Record<string, unknown>;
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        continue;
+      }
+      const recordFields = summarizeStructuredFields(parsed);
+      const recordText = extractStructuredText(parsed);
+      const heading = buildStructuredHeading(document.name, parsed, index);
+      const content = normalizeWhitespace(
+        [
+          `# ${heading}`,
+          recordFields ? `Fields: ${recordFields}` : undefined,
+          recordText ? `Content: ${recordText}` : undefined,
+          !recordText ? `Raw record: ${truncateForChunk(line, 1200)}` : undefined,
+        ]
+          .filter(Boolean)
+          .join("\n")
+      );
+      if (!content) {
+        continue;
+      }
+
+      chunks.push({
+        sourceId: document.id,
+        sourceName: document.name,
+        content,
+        heading,
+        metadata: {
+          ...document.metadata,
+          structuredFormat: "jsonl",
+          recordIndex: index,
+          structuredFields: Object.keys(parsed),
+          structuredSummary: recordFields,
+        },
+      });
+    } catch {
+      continue;
+    }
+  }
+
+  return chunks;
+}
+
 function summarizeDocument(document: RagDocument): string {
   const chunks = chunkDocument(document);
   if (chunks.length === 0) {
@@ -291,6 +346,126 @@ function summarizeDocument(document: RagDocument): string {
   return normalizeWhitespace(
     [`# ${document.name}`, ...head, ...tail].join("\n\n")
   ).slice(0, 1200);
+}
+
+function isJsonlDocument(document: RagDocument): boolean {
+  const extension = typeof document.metadata?.extension === "string"
+    ? document.metadata.extension.toLowerCase()
+    : document.name.toLowerCase().endsWith(".jsonl")
+      ? ".jsonl"
+      : "";
+  return extension === ".jsonl";
+}
+
+function buildStructuredHeading(
+  documentName: string,
+  record: Record<string, unknown>,
+  index: number
+): string {
+  const preferredKeys = [
+    "conversation_id",
+    "conversationId",
+    "session_id",
+    "sessionId",
+    "id",
+    "message_id",
+    "messageId",
+  ];
+  for (const key of preferredKeys) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) {
+      return `${documentName} - ${key}:${value.trim()}`;
+    }
+  }
+  return `${documentName} - record ${index + 1}`;
+}
+
+function summarizeStructuredFields(record: Record<string, unknown>): string {
+  const preferredKeys = [
+    "conversation_id",
+    "conversationId",
+    "session_id",
+    "sessionId",
+    "timestamp",
+    "created_at",
+    "createdAt",
+    "role",
+    "topic",
+    "user_id",
+    "userId",
+  ];
+  const orderedKeys = [
+    ...preferredKeys.filter((key) => key in record),
+    ...Object.keys(record).filter((key) => !preferredKeys.includes(key)).slice(0, 6),
+  ];
+  const seen = new Set<string>();
+  const pairs: Array<string> = [];
+  for (const key of orderedKeys) {
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    const value = record[key];
+    if (
+      typeof value === "string" ||
+      typeof value === "number" ||
+      typeof value === "boolean"
+    ) {
+      pairs.push(`${key}=${truncateForChunk(String(value), 120)}`);
+    }
+    if (pairs.length >= 8) {
+      break;
+    }
+  }
+  return pairs.join(", ");
+}
+
+function extractStructuredText(record: Record<string, unknown>): string {
+  const directTextKeys = [
+    "content",
+    "message",
+    "text",
+    "body",
+    "summary",
+    "title",
+    "prompt",
+    "response",
+  ];
+  const pieces: Array<string> = [];
+  for (const key of directTextKeys) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) {
+      pieces.push(value.trim());
+    }
+  }
+
+  const messages = record.messages;
+  if (Array.isArray(messages)) {
+    for (const message of messages.slice(0, 4)) {
+      if (!message || typeof message !== "object") {
+        continue;
+      }
+      const role = typeof (message as Record<string, unknown>).role === "string"
+        ? (message as Record<string, unknown>).role as string
+        : undefined;
+      const content = typeof (message as Record<string, unknown>).content === "string"
+        ? (message as Record<string, unknown>).content as string
+        : undefined;
+      if (content?.trim()) {
+        pieces.push(`${role ?? "message"}: ${content.trim()}`);
+      }
+    }
+  }
+
+  return truncateForChunk(normalizeWhitespace(pieces.join(" \n ")), 1200);
+}
+
+function truncateForChunk(value: string, maxLength: number): string {
+  const normalized = normalizeWhitespace(value);
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+  return `${normalized.slice(0, maxLength - 1)}…`;
 }
 
 function extractHeading(line: string): string {
