@@ -9,6 +9,7 @@
 - `packages/adapter-lmstudio/src/orchestratorRuntime.ts`
 - `packages/mcp-server/src/lmstudioRuntime.ts`
 - existing smoke scripts touching rerank and MCP handler behavior
+- `scripts/smoke-lmstudio-model-resolution.ts`
 
 ## Problem statement
 Both the adapter and the MCP LM Studio runtime now support embedding and rerank model resolution, but the selection logic is duplicated.
@@ -44,14 +45,34 @@ Current duplication:
    - Typecheck core, adapter, and MCP packages.
    - Run rerank and MCP smoke coverage.
 
+6. **Follow-up validation coverage**
+   - Add targeted helper-branch smoke coverage for:
+     - manual embedding model path
+     - auto-detect embedding downloaded-model preference
+     - manual rerank model path and cache reuse
+     - auto-detect rerank loaded/downloaded-model preference
+     - missing-model error paths for embedding and rerank helpers
+
 ## Current implementation focus
-- [ ] Step 1: add shared helper module.
-- [ ] Step 2: migrate adapter runtime.
-- [ ] Step 3: migrate MCP LM Studio runtime.
-- [ ] Step 4: cleanup duplicated helpers.
-- [ ] Step 5: validate with typechecks and smoke tests.
+- [x] Step 1: add shared helper module.
+- [x] Step 2: migrate adapter runtime.
+- [x] Step 3: migrate MCP LM Studio runtime.
+- [x] Step 4: cleanup duplicated helpers.
+- [x] Step 5: validate with typechecks and smoke tests.
+- [x] Step 6: add focused helper-branch smoke coverage.
+
+## Validation completed
+- `npm run typecheck:adapter`
+- `npm run typecheck:mcp`
+- `npm run smoke:mcp`
+- `npm run smoke:lmstudio-model-resolution`
 
 ## Non-goals for this pass
 - Changing user-facing rerank or embedding config semantics.
 - Introducing a non-LLM reranker engine.
 - Refactoring non-LM-Studio runtimes.
+
+## Remaining follow-up options
+- Move `packages/adapter-lmstudio/src/lmstudioModelResolution.ts` to a more neutral shared location so MCP no longer imports from adapter internals.
+- Decide whether embedding/rerank helper APIs should converge behind a more generic model-resolution abstraction.
+- Add runtime-level assertions for note text if stronger end-to-end fallback diagnostics coverage is desired beyond helper-level error-contract validation.

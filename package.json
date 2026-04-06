@@ -25,6 +25,7 @@
     "smoke:mcp": "npx -y tsx scripts/smoke-mcp-handlers.ts",
     "smoke:mcp-filesystem": "npx -y tsx scripts/smoke-mcp-filesystem.ts",
     "smoke:model-rerank": "npx -y tsx scripts/smoke-model-rerank.ts",
+    "smoke:lmstudio-model-resolution": "npx -y tsx scripts/smoke-lmstudio-model-resolution.ts",
     "stress:model-rerank": "npx -y tsx scripts/stress-model-rerank.ts",
     "eval": "npx -y tsx scripts/eval.ts",
     "mcp:stdio": "npm run stdio --workspace @rag-v2/mcp-server",
