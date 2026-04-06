@@ -73,6 +73,69 @@ export function lexicalRetrieveFromDocuments(
     .slice(0, maxCandidates);
 }
 
+export function hierarchicalRetrieveFromDocuments(
+  query: string,
+  documents: Array<RagDocument>,
+  maxCandidates: number,
+  options?: {
+    maxParentDocuments?: number;
+    maxChildChunksPerDocument?: number;
+  }
+): Array<RagCandidate> {
+  const normalizedQuery = normalizeWhitespace(query);
+  const queryTokens = tokenize(normalizedQuery);
+  const quotedSpans = extractQuotedSpans(query);
+  const parentRankings = documents
+    .map((document) => {
+      const summary = summarizeDocument(document);
+      const score = scoreChunk(normalizedQuery, queryTokens, quotedSpans, {
+        sourceId: document.id,
+        sourceName: document.name,
+        heading: document.name,
+        content: summary,
+        metadata: document.metadata,
+      });
+      return {
+        document,
+        summary,
+        score,
+      };
+    })
+    .filter((entry) => entry.score > 0)
+    .sort((left, right) => right.score - left.score)
+    .slice(0, options?.maxParentDocuments ?? Math.max(2, Math.min(4, maxCandidates)));
+
+  const childCandidates: Array<RagCandidate> = [];
+  for (const parent of parentRankings) {
+    const rankedChunks = chunkDocument(parent.document)
+      .map((chunk) => ({
+        chunk,
+        score: scoreChunk(normalizedQuery, queryTokens, quotedSpans, chunk),
+      }))
+      .filter((entry) => entry.score > 0)
+      .sort((left, right) => right.score - left.score)
+      .slice(0, options?.maxChildChunksPerDocument ?? Math.max(3, maxCandidates))
+      .map(({ chunk, score }) => ({
+        sourceId: chunk.sourceId,
+        sourceName: chunk.sourceName,
+        content: chunk.content,
+        score: Math.min(1, score * 0.8 + parent.score * 0.2),
+        metadata: {
+          ...chunk.metadata,
+          retrievalMode: "hierarchical-retrieval",
+          parentSummary: parent.summary,
+          parentScore: parent.score,
+        },
+      } satisfies RagCandidate));
+
+    childCandidates.push(...rankedChunks);
+  }
+
+  return childCandidates
+    .sort((left, right) => right.score - left.score)
+    .slice(0, maxCandidates);
+}
+
 function scoreChunk(
   normalizedQuery: string,
   queryTokens: Array<string>,
@@ -107,7 +170,7 @@ function scoreChunk(
   );
 }
 
-function chunkDocument(document: RagDocument): Array<ChunkCandidate> {
+export function chunkDocument(document: RagDocument): Array<ChunkCandidate> {
   const lines = document.content.split(/\r?\n/);
   const chunks: Array<ChunkCandidate> = [];
   let primaryHeading = document.name;
@@ -168,6 +231,20 @@ function chunkDocument(document: RagDocument): Array<ChunkCandidate> {
 
   flush();
   return chunks;
+}
+
+function summarizeDocument(document: RagDocument): string {
+  const chunks = chunkDocument(document);
+  if (chunks.length === 0) {
+    return normalizeWhitespace(document.content).slice(0, 600);
+  }
+
+  const head = chunks.slice(0, 2).map((chunk) => chunk.content);
+  const tail = chunks.length > 2 ? [chunks[chunks.length - 1]!.content] : [];
+
+  return normalizeWhitespace(
+    [`# ${document.name}`, ...head, ...tail].join("\n\n")
+  ).slice(0, 1200);
 }
 
 function extractHeading(line: string): string {

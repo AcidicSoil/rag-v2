@@ -39,19 +39,28 @@ async function main() {
     );
 
     const jsonlPath = path.join(tempRoot, "dataclaw_export.jsonl");
-    const line = JSON.stringify({
+    const repeatedLine = JSON.stringify({
       conversation_id: "conv-1",
       role: "user",
       content: "Session tool usage and metadata sample.",
     });
-    const largeJsonl = Array.from({ length: 9000 }, () => line).join("\n");
+    const targetLine = JSON.stringify({
+      conversation_id: "conv-999",
+      role: "assistant",
+      content: "Target tool usage entry with export routing evidence and hierarchy marker.",
+    });
+    const largeJsonl = [
+      ...Array.from({ length: 8500 }, () => repeatedLine),
+      targetLine,
+      ...Array.from({ length: 499 }, () => repeatedLine),
+    ].join("\n");
     await fs.writeFile(jsonlPath, `${largeJsonl}\n`, "utf8");
 
     const localResult = await orchestrateRagRequest(
       {
-        query: "Find the specific session tool usage entries in this file.",
+        query: "Find the specific export routing evidence and hierarchy marker entry in this file.",
         paths: [jsonlPath],
-        outputMode: "prepared-prompt",
+        outputMode: "search-results",
       },
       runtime
     );
@@ -63,6 +72,14 @@ async function main() {
     assert(
       localResult.diagnostics.notes?.some((note) => note.includes("scope=local")),
       "Expected diagnostics to record large-corpus local classification."
+    );
+    assert(localResult.candidates.length > 0, "Expected hierarchical retrieval to produce candidates.");
+    assert(
+      localResult.candidates.some((candidate) =>
+        candidate.content.includes("hierarchy marker") &&
+        candidate.metadata?.retrievalMode === "hierarchical-retrieval"
+      ),
+      "Expected hierarchical retrieval to surface the target chunk with hierarchical metadata."
     );
 
     console.log("Large-corpus routing smoke test passed.");

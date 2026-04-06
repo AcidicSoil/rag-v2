@@ -24,6 +24,10 @@ import {
   fuseRagCandidates,
   rerankRagCandidates,
 } from "./retrievalPipeline";
+import {
+  hierarchicalRetrieveFromDocuments,
+  lexicalRetrieveFromDocuments,
+} from "./localRetrieval";
 import { generateCoreQueryRewrites } from "./rewrite";
 import {
   buildCoreAmbiguousGateMessage,
@@ -408,7 +412,7 @@ async function runRetrievalFlow(
   let warnings: Array<string> = [];
 
   while (attempt <= (options.routing?.correctiveMaxAttempts ?? DEFAULT_CORRECTIVE_MAX_ATTEMPTS)) {
-    const candidates = await retrieveCandidates(query, corpus, activeRewrites, options, runtime);
+    const candidates = await retrieveCandidates(query, corpus, activeRewrites, options, runtime, activeRoute);
     const filtered = candidates.filter((candidate) => candidate.score >= (retrievalOptions.minScore ?? 0));
     finalCandidates = await finalizeCandidates(query, filtered, options, runtime, diagnostics);
 
@@ -489,10 +493,39 @@ async function retrieveCandidates(
   corpus: RagLoadedCorpus,
   rewrites: Array<RagQueryRewrite>,
   options: RagRequestOptions,
-  runtime: RagOrchestratorRuntime
+  runtime: RagOrchestratorRuntime,
+  route?: RagExecutionRoute
 ): Promise<Array<RagCandidate>> {
   if (corpus.candidates && corpus.candidates.length > 0) {
     return corpus.candidates.slice(0, options.retrieval?.maxEvidenceBlocks ?? DEFAULT_MAX_EVIDENCE_BLOCKS);
+  }
+
+  if (route === "hierarchical-retrieval") {
+    const maxCandidates = options.retrieval?.maxCandidates ?? DEFAULT_MAX_CANDIDATES;
+    if (rewrites.length <= 1) {
+      return hierarchicalRetrieveFromDocuments(
+        query,
+        corpus.documents,
+        maxCandidates,
+        {
+          maxParentDocuments: Math.max(2, Math.min(4, options.retrieval?.maxEvidenceBlocks ?? DEFAULT_MAX_EVIDENCE_BLOCKS)),
+          maxChildChunksPerDocument: Math.max(3, options.retrieval?.maxEvidenceBlocks ?? DEFAULT_MAX_EVIDENCE_BLOCKS),
+        }
+      );
+    }
+
+    const retrievalRuns = rewrites.map((rewrite) =>
+      hierarchicalRetrieveFromDocuments(rewrite.text, corpus.documents, maxCandidates, {
+        maxParentDocuments: Math.max(2, Math.min(4, options.retrieval?.maxEvidenceBlocks ?? DEFAULT_MAX_EVIDENCE_BLOCKS)),
+        maxChildChunksPerDocument: Math.max(3, options.retrieval?.maxEvidenceBlocks ?? DEFAULT_MAX_EVIDENCE_BLOCKS),
+      })
+    );
+
+    return fuseRagCandidates(
+      retrievalRuns,
+      options.retrieval?.fusionMethod ?? "reciprocal-rank-fusion",
+      maxCandidates
+    );
   }
 
   if (runtime.semanticRetriever) {
