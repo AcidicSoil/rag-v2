@@ -23,6 +23,11 @@ import {
 import { performModelAssistedRerank } from "./modelRerank";
 import type { RankedRetrievalEntry, RerankStrategy } from "./types/rerank";
 import { AUTO_DETECT_MODEL_ID } from "./config";
+import {
+  browseFileSystem,
+  fileInfo,
+  readTextFileRange,
+} from "./filesystem";
 
 function estimateTokens(value: string) {
   return Math.ceil(value.trim().length / 4);
@@ -353,49 +358,13 @@ export function createLmStudioAdapterRuntime(
     },
     browser: {
       async browse(input) {
-        const normalizedPath = input.path === "~"
-          ? require("node:os").homedir()
-          : input.path.startsWith("~/")
-            ? require("node:path").join(require("node:os").homedir(), input.path.slice(2))
-            : require("node:path").resolve(input.path);
-        return {
-          requestedPath: input.path,
-          resolvedPath: normalizedPath,
-          cwd: process.cwd(),
-          exists: false,
-          entries: [],
-          truncated: false,
-          errors: ["Filesystem browsing is only exposed through the MCP server runtime in this phase."],
-        };
+        return browseFileSystem(input);
       },
       async fileInfo(input) {
-        const normalizedPath = input.path === "~"
-          ? require("node:os").homedir()
-          : input.path.startsWith("~/")
-            ? require("node:path").join(require("node:os").homedir(), input.path.slice(2))
-            : require("node:path").resolve(input.path);
-        return {
-          requestedPath: input.path,
-          resolvedPath: normalizedPath,
-          cwd: process.cwd(),
-          exists: false,
-          errors: ["Filesystem inspection is only exposed through the MCP server runtime in this phase."],
-        };
+        return fileInfo(input);
       },
       async readFile(input) {
-        const normalizedPath = input.path === "~"
-          ? require("node:os").homedir()
-          : input.path.startsWith("~/")
-            ? require("node:path").join(require("node:os").homedir(), input.path.slice(2))
-            : require("node:path").resolve(input.path);
-        return {
-          requestedPath: input.path,
-          resolvedPath: normalizedPath,
-          cwd: process.cwd(),
-          exists: false,
-          truncated: false,
-          errors: ["Filesystem text reading is only exposed through the MCP server runtime in this phase."],
-        };
+        return readTextFileRange(input);
       },
     },
   };
