@@ -337,6 +337,12 @@ function cloneAnalysis(
 
 export function inferQuestionScope(query: string): "local" | "global" {
   const normalized = query.trim();
+  const hasStructuredLookupIntent =
+    /\b(?:conversation|session|message|record|timestamp|created(?:\s+at)?|date|time)\b/i.test(normalized) &&
+    (/[A-Za-z0-9]+[-_:/.][A-Za-z0-9:_./-]+/.test(normalized) || /\b\d{4}-\d{2}-\d{2}\b/.test(normalized));
+  if (hasStructuredLookupIntent) {
+    return "local";
+  }
   if (GLOBAL_QUERY_PATTERNS.some((pattern) => pattern.test(normalized))) {
     return "global";
   }
@@ -607,6 +613,107 @@ function truncateForMetadata(text?: string, maxLength = 500): string | undefined
   return `${normalized.slice(0, maxLength - 1)}…`;
 }
 
+function buildStructuredSynopsisSummary(
+  synopsis: RagFileSynopsis
+): RagDocument | undefined {
+  if (synopsis.format !== "jsonl") {
+    return undefined;
+  }
+
+  const fieldCounts = new Map<string, number>();
+  const sampleValues = new Map<string, Set<string>>();
+
+  for (const window of [synopsis.sampleHead, synopsis.sampleTail]) {
+    if (!window) {
+      continue;
+    }
+    for (const line of window.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed) {
+        continue;
+      }
+      try {
+        const parsed = JSON.parse(trimmed) as Record<string, unknown>;
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+          continue;
+        }
+        for (const [key, value] of Object.entries(parsed)) {
+          fieldCounts.set(key, (fieldCounts.get(key) ?? 0) + 1);
+          if (
+            typeof value !== "string" &&
+            typeof value !== "number" &&
+            typeof value !== "boolean"
+          ) {
+            continue;
+          }
+          const normalizedValue = truncateForMetadata(String(value), 80);
+          if (!normalizedValue) {
+            continue;
+          }
+          if (!sampleValues.has(key)) {
+            sampleValues.set(key, new Set<string>());
+          }
+          const values = sampleValues.get(key);
+          if (values && values.size < 4) {
+            values.add(normalizedValue);
+          }
+        }
+      } catch {
+        continue;
+      }
+    }
+  }
+
+  if (fieldCounts.size === 0) {
+    return undefined;
+  }
+
+  const topFields = [...fieldCounts.entries()]
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+    .slice(0, 10)
+    .map(([field]) => field);
+  const preferredSampleKeys = [
+    "conversation_id",
+    "conversationId",
+    "session_id",
+    "sessionId",
+    "id",
+    "message_id",
+    "messageId",
+    "topic",
+    "role",
+    "timestamp",
+    "created_at",
+    "createdAt",
+    "user_id",
+    "userId",
+  ];
+
+  const sampleLines = preferredSampleKeys
+    .filter((key) => sampleValues.has(key))
+    .map((key) => `${key}: ${[...(sampleValues.get(key) ?? [])].join(", ")}`)
+    .slice(0, 6);
+
+  return {
+    id: `structured-summary:${synopsis.resolvedPath}`,
+    name: `structured-summary:${synopsis.path}`,
+    content: [
+      `Structured file: ${synopsis.path}`,
+      `Format: ${synopsis.format}`,
+      `Observed fields: ${topFields.join(", ")}`,
+      sampleLines.length > 0 ? `Sample values:\n${sampleLines.join("\n")}` : undefined,
+      `Synopsis: ${synopsis.synopsis}`,
+    ]
+      .filter(Boolean)
+      .join("\n"),
+    metadata: {
+      sourceType: "structured-file-summary",
+      path: synopsis.path,
+      format: synopsis.format,
+    },
+  };
+}
+
 function buildSummaryDocuments(
   manifests: Array<RagDirectoryManifest>,
   synopses: Array<RagFileSynopsis>
@@ -636,6 +743,11 @@ function buildSummaryDocuments(
   }
 
   for (const synopsis of synopses) {
+    const structuredSummary = buildStructuredSynopsisSummary(synopsis);
+    if (structuredSummary) {
+      documents.push(structuredSummary);
+    }
+
     documents.push({
       id: `synopsis:${synopsis.resolvedPath}`,
       name: `synopsis:${synopsis.path}`,

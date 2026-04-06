@@ -103,6 +103,9 @@ async function main() {
     });
     const targetLine = JSON.stringify({
       conversation_id: "conv-999",
+      session_id: "session-999",
+      timestamp: "2025-02-03T10:15:00Z",
+      topic: "routing",
       role: "assistant",
       content:
         "Target tool usage entry with export routing evidence and hierarchy marker.",
@@ -152,9 +155,39 @@ async function main() {
       localResult.candidates.some(
         (candidate) =>
           Array.isArray(candidate.metadata?.structuredFields) &&
-          String(candidate.metadata?.structuredSummary ?? "").includes("conversation_id=")
+          String(candidate.metadata?.structuredSummary ?? "").includes("conversation_id=") &&
+          typeof candidate.metadata?.structuredRecord === "object"
       ),
       "Expected JSONL retrieval chunks to carry structured field metadata."
+    );
+
+    const structuredExactResult = await orchestrateRagRequest(
+      {
+        query:
+          "Find conversation conv-999 timestamp 2025-02-03 topic routing entry with hierarchy marker.",
+        paths: [jsonlPath],
+        outputMode: "search-results",
+      },
+      runtime
+    );
+
+    assert(
+      structuredExactResult.candidates.length > 0,
+      "Expected structured exact retrieval query to produce candidates."
+    );
+    assert(
+      structuredExactResult.candidates[0]?.metadata?.retrievalMode === "structured-query-first",
+      "Expected exact structured query to use structured-query-first retrieval."
+    );
+    assert(
+      Array.isArray(structuredExactResult.candidates[0]?.metadata?.structuredQueryMatches) &&
+        structuredExactResult.candidates[0]!.metadata!.structuredQueryMatches.length >= 1,
+      "Expected exact structured query to annotate matched structured fields."
+    );
+    assert(
+      structuredExactResult.candidates[0]?.content.includes("conv-999") &&
+        structuredExactResult.candidates[0]?.content.includes("2025-02-03T10:15:00Z"),
+      "Expected exact structured query to surface the targeted JSONL record."
     );
 
     const cachedLocalResult = await orchestrateRagRequest(

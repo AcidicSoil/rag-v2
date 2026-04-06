@@ -33,6 +33,17 @@ const STOP_WORDS = new Set([
   "with",
 ]);
 
+const STRUCTURED_FIELD_ALIASES = {
+  conversationId: ["conversation_id", "conversationId"],
+  sessionId: ["session_id", "sessionId"],
+  messageId: ["message_id", "messageId"],
+  id: ["id"],
+  timestamp: ["timestamp", "created_at", "createdAt", "time", "date"],
+  role: ["role"],
+  topic: ["topic", "subject"],
+  userId: ["user_id", "userId"],
+} as const;
+
 interface ChunkCandidate {
   sourceId: string;
   sourceName: string;
@@ -41,15 +52,40 @@ interface ChunkCandidate {
   metadata?: Record<string, unknown>;
 }
 
+interface StructuredQueryConstraint {
+  label: string;
+  aliases: ReadonlyArray<string>;
+  value: string;
+  normalizedValue: string;
+  strategy: "exact" | "prefix";
+}
+
+interface StructuredQueryPlan {
+  constraints: Array<StructuredQueryConstraint>;
+  fallbackQuery: string;
+}
+
 export function lexicalRetrieveFromDocuments(
   query: string,
   documents: Array<RagDocument>,
   maxCandidates: number
 ): Array<RagCandidate> {
-  const normalizedQuery = normalizeWhitespace(query);
+  const structuredPlan = buildStructuredQueryPlan(query);
+  const structuredCandidates = retrieveStructuredCandidates(
+    structuredPlan,
+    documents,
+    maxCandidates,
+    "structured-query-first"
+  );
+  if (structuredCandidates.length >= maxCandidates) {
+    return structuredCandidates;
+  }
+
+  const lexicalQuery = structuredPlan.fallbackQuery || query;
+  const normalizedQuery = normalizeWhitespace(lexicalQuery);
   const queryTokens = tokenize(normalizedQuery);
-  const quotedSpans = extractQuotedSpans(query);
-  const candidates: Array<RagCandidate> = [];
+  const quotedSpans = extractQuotedSpans(lexicalQuery);
+  const lexicalCandidates: Array<RagCandidate> = [];
 
   for (const document of documents) {
     const chunks = chunkDocument(document);
@@ -59,7 +95,7 @@ export function lexicalRetrieveFromDocuments(
         continue;
       }
 
-      candidates.push({
+      lexicalCandidates.push({
         sourceId: chunk.sourceId,
         sourceName: chunk.sourceName,
         content: chunk.content,
@@ -69,9 +105,7 @@ export function lexicalRetrieveFromDocuments(
     }
   }
 
-  return candidates
-    .sort((left, right) => right.score - left.score)
-    .slice(0, maxCandidates);
+  return mergeCandidates(structuredCandidates, lexicalCandidates, maxCandidates);
 }
 
 export function hierarchicalRetrieveFromDocuments(
@@ -84,9 +118,21 @@ export function hierarchicalRetrieveFromDocuments(
     hierarchicalIndex?: RagHierarchicalIndex;
   }
 ): Array<RagCandidate> {
-  const normalizedQuery = normalizeWhitespace(query);
+  const structuredPlan = buildStructuredQueryPlan(query);
+  const structuredCandidates = retrieveStructuredCandidates(
+    structuredPlan,
+    documents,
+    maxCandidates,
+    "structured-query-first"
+  );
+  if (structuredCandidates.length >= maxCandidates) {
+    return structuredCandidates;
+  }
+
+  const lexicalQuery = structuredPlan.fallbackQuery || query;
+  const normalizedQuery = normalizeWhitespace(lexicalQuery);
   const queryTokens = tokenize(normalizedQuery);
-  const quotedSpans = extractQuotedSpans(query);
+  const quotedSpans = extractQuotedSpans(lexicalQuery);
   const hierarchicalIndex =
     options?.hierarchicalIndex ?? buildHierarchicalDocumentIndex(documents);
   const parentRankings = hierarchicalIndex.nodes
@@ -140,9 +186,7 @@ export function hierarchicalRetrieveFromDocuments(
     childCandidates.push(...rankedChunks);
   }
 
-  return childCandidates
-    .sort((left, right) => right.score - left.score)
-    .slice(0, maxCandidates);
+  return mergeCandidates(structuredCandidates, childCandidates, maxCandidates);
 }
 
 export function buildHierarchicalDocumentIndex(
@@ -180,6 +224,185 @@ export function buildHierarchicalDocumentIndex(
       };
     }),
   };
+}
+
+function retrieveStructuredCandidates(
+  structuredPlan: StructuredQueryPlan,
+  documents: Array<RagDocument>,
+  maxCandidates: number,
+  retrievalMode: string
+): Array<RagCandidate> {
+  if (structuredPlan.constraints.length === 0) {
+    return [];
+  }
+
+  const normalizedFallbackQuery = normalizeWhitespace(
+    structuredPlan.fallbackQuery || structuredPlan.constraints.map((constraint) => constraint.value).join(" ")
+  );
+  const queryTokens = tokenize(normalizedFallbackQuery);
+  const quotedSpans = extractQuotedSpans(structuredPlan.fallbackQuery || "");
+  const matches: Array<RagCandidate> = [];
+
+  for (const document of documents) {
+    for (const chunk of chunkDocument(document)) {
+      if (chunk.metadata?.structuredFormat !== "jsonl") {
+        continue;
+      }
+
+      const structuredRecord = asStructuredRecord(chunk.metadata?.structuredRecord);
+      if (!structuredRecord) {
+        continue;
+      }
+
+      const matchedConstraints: Array<string> = [];
+      let allMatched = true;
+      for (const constraint of structuredPlan.constraints) {
+        if (!matchesConstraint(structuredRecord, constraint)) {
+          allMatched = false;
+          break;
+        }
+        matchedConstraints.push(`${constraint.label}=${constraint.value}`);
+      }
+      if (!allMatched) {
+        continue;
+      }
+
+      const lexicalScore = normalizedFallbackQuery
+        ? scoreChunk(normalizedFallbackQuery, queryTokens, quotedSpans, chunk)
+        : 0;
+      const constraintCoverage =
+        structuredPlan.constraints.length > 0
+          ? matchedConstraints.length / structuredPlan.constraints.length
+          : 0;
+      matches.push({
+        sourceId: chunk.sourceId,
+        sourceName: chunk.sourceName,
+        content: chunk.content,
+        score: Math.min(1, 0.72 + constraintCoverage * 0.2 + lexicalScore * 0.08),
+        metadata: {
+          ...chunk.metadata,
+          retrievalMode,
+          structuredQueryMatches: matchedConstraints,
+        },
+      });
+    }
+  }
+
+  return matches
+    .sort((left, right) => right.score - left.score)
+    .slice(0, maxCandidates);
+}
+
+function buildStructuredQueryPlan(query: string): StructuredQueryPlan {
+  const normalizedQuery = normalizeWhitespace(query);
+  if (!normalizedQuery) {
+    return {
+      constraints: [],
+      fallbackQuery: "",
+    };
+  }
+
+  const patterns = [
+    {
+      label: "conversation_id",
+      aliases: [...STRUCTURED_FIELD_ALIASES.conversationId, ...STRUCTURED_FIELD_ALIASES.sessionId],
+      strategy: "exact" as const,
+      regex: /\b(?:conversation(?:\s+id)?|conversation_id|conversationId|conv(?:ersation)?|session(?:\s+id)?|session_id|sessionId)\s*(?:=|:|#)?\s*["']?([A-Za-z0-9][A-Za-z0-9._:/+-]{1,})["']?/gi,
+      accept: looksStructuredIdentifier,
+    },
+    {
+      label: "message_id",
+      aliases: [...STRUCTURED_FIELD_ALIASES.messageId, ...STRUCTURED_FIELD_ALIASES.id],
+      strategy: "exact" as const,
+      regex: /\b(?:message(?:\s+id)?|message_id|messageId|record(?:\s+id)?|id)\s*(?:=|:|#)?\s*["']?([A-Za-z0-9][A-Za-z0-9._:/+-]{1,})["']?/gi,
+      accept: looksStructuredIdentifier,
+    },
+    {
+      label: "timestamp",
+      aliases: STRUCTURED_FIELD_ALIASES.timestamp,
+      strategy: "prefix" as const,
+      regex: /\b(?:timestamp|created(?:\s+at)?|created_at|createdAt|time|date)\s*(?:=|:)?\s*["']?(\d{4}-\d{2}-\d{2}(?:[tT ][0-9:.+-]{2,})?)["']?/gi,
+      accept: (value: string) => value.length >= 10,
+    },
+    {
+      label: "role",
+      aliases: STRUCTURED_FIELD_ALIASES.role,
+      strategy: "exact" as const,
+      regex: /\brole\s*(?:=|:)?\s*["']?(user|assistant|system|tool|developer)["']?/gi,
+      accept: (value: string) => value.length >= 3,
+    },
+    {
+      label: "topic",
+      aliases: STRUCTURED_FIELD_ALIASES.topic,
+      strategy: "exact" as const,
+      regex: /\btopic\s*(?:=|:)?\s*["']?([A-Za-z][A-Za-z0-9_-]{1,40})["']?/gi,
+      accept: (value: string) => value.trim().length >= 2,
+    },
+    {
+      label: "user_id",
+      aliases: STRUCTURED_FIELD_ALIASES.userId,
+      strategy: "exact" as const,
+      regex: /\b(?:user(?:\s+id)?|user_id|userId)\s*(?:=|:|#)?\s*["']?([A-Za-z0-9][A-Za-z0-9._:/+-]{1,})["']?/gi,
+      accept: looksStructuredIdentifier,
+    },
+  ];
+
+  const constraints: Array<StructuredQueryConstraint> = [];
+  const remainingSpans: Array<{ start: number; end: number }> = [];
+  for (const pattern of patterns) {
+    for (const match of normalizedQuery.matchAll(pattern.regex)) {
+      const value = match[1]?.trim();
+      if (!value || !pattern.accept(value)) {
+        continue;
+      }
+      constraints.push({
+        label: pattern.label,
+        aliases: pattern.aliases,
+        value,
+        normalizedValue: normalizeStructuredValue(value),
+        strategy: pattern.strategy,
+      });
+      if (typeof match.index === "number") {
+        remainingSpans.push({
+          start: match.index,
+          end: match.index + match[0].length,
+        });
+      }
+    }
+  }
+
+  const deduped = dedupeStructuredConstraints(constraints);
+  const fallbackQuery = normalizeWhitespace(removeMatchedSpans(normalizedQuery, remainingSpans));
+  return {
+    constraints: deduped,
+    fallbackQuery,
+  };
+}
+
+function matchesConstraint(
+  record: Record<string, string>,
+  constraint: StructuredQueryConstraint
+): boolean {
+  for (const alias of constraint.aliases) {
+    const value = record[alias];
+    if (!value) {
+      continue;
+    }
+    const normalizedRecordValue = normalizeStructuredValue(value);
+    if (!normalizedRecordValue) {
+      continue;
+    }
+    if (constraint.strategy === "prefix") {
+      if (normalizedRecordValue.startsWith(constraint.normalizedValue)) {
+        return true;
+      }
+      continue;
+    }
+    if (normalizedRecordValue === constraint.normalizedValue) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function scoreChunk(
@@ -299,6 +522,7 @@ function chunkJsonlDocument(document: RagDocument): Array<ChunkCandidate> {
       const recordFields = summarizeStructuredFields(parsed);
       const recordText = extractStructuredText(parsed);
       const heading = buildStructuredHeading(document.name, parsed, index);
+      const structuredRecord = extractStructuredRecord(parsed);
       const content = normalizeWhitespace(
         [
           `# ${heading}`,
@@ -324,6 +548,7 @@ function chunkJsonlDocument(document: RagDocument): Array<ChunkCandidate> {
           recordIndex: index,
           structuredFields: Object.keys(parsed),
           structuredSummary: recordFields,
+          structuredRecord,
         },
       });
     } catch {
@@ -370,11 +595,14 @@ function buildStructuredHeading(
     "id",
     "message_id",
     "messageId",
+    "timestamp",
+    "created_at",
+    "createdAt",
   ];
   for (const key of preferredKeys) {
     const value = record[key];
-    if (typeof value === "string" && value.trim()) {
-      return `${documentName} - ${key}:${value.trim()}`;
+    if ((typeof value === "string" || typeof value === "number") && String(value).trim()) {
+      return `${documentName} - ${key}:${String(value).trim()}`;
     }
   }
   return `${documentName} - record ${index + 1}`;
@@ -460,6 +688,20 @@ function extractStructuredText(record: Record<string, unknown>): string {
   return truncateForChunk(normalizeWhitespace(pieces.join(" \n ")), 1200);
 }
 
+function extractStructuredRecord(record: Record<string, unknown>): Record<string, string> {
+  const extracted: Record<string, string> = {};
+  for (const [key, value] of Object.entries(record)) {
+    if (
+      typeof value === "string" ||
+      typeof value === "number" ||
+      typeof value === "boolean"
+    ) {
+      extracted[key] = truncateForChunk(String(value), 160);
+    }
+  }
+  return extracted;
+}
+
 function truncateForChunk(value: string, maxLength: number): string {
   const normalized = normalizeWhitespace(value);
   if (normalized.length <= maxLength) {
@@ -511,4 +753,85 @@ function tokenize(value: string): Array<string> {
 
 function normalizeWhitespace(value: string): string {
   return value.replace(/\s+/g, " ").trim();
+}
+
+function normalizeStructuredValue(value: string): string {
+  return normalizeWhitespace(value).toLowerCase();
+}
+
+function dedupeStructuredConstraints(
+  constraints: Array<StructuredQueryConstraint>
+): Array<StructuredQueryConstraint> {
+  const deduped: Array<StructuredQueryConstraint> = [];
+  const seen = new Set<string>();
+  for (const constraint of constraints) {
+    const key = `${constraint.label}:${constraint.normalizedValue}`;
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    deduped.push(constraint);
+  }
+  return deduped;
+}
+
+function removeMatchedSpans(
+  query: string,
+  spans: Array<{ start: number; end: number }>
+): string {
+  if (spans.length === 0) {
+    return query;
+  }
+
+  const ordered = [...spans].sort((left, right) => left.start - right.start);
+  let cursor = 0;
+  let output = "";
+  for (const span of ordered) {
+    if (span.start < cursor) {
+      continue;
+    }
+    output += `${query.slice(cursor, span.start)} `;
+    cursor = span.end;
+  }
+  output += query.slice(cursor);
+  return output;
+}
+
+function looksStructuredIdentifier(value: string): boolean {
+  return /\d/.test(value) || /[-_:/.]/.test(value);
+}
+
+function asStructuredRecord(value: unknown): Record<string, string> | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+
+  const entries = Object.entries(value as Record<string, unknown>).filter(
+    ([, entryValue]) => typeof entryValue === "string"
+  ) as Array<[string, string]>;
+  if (entries.length === 0) {
+    return undefined;
+  }
+  return Object.fromEntries(entries);
+}
+
+function mergeCandidates(
+  preferred: Array<RagCandidate>,
+  fallback: Array<RagCandidate>,
+  maxCandidates: number
+): Array<RagCandidate> {
+  const merged: Array<RagCandidate> = [];
+  const seen = new Set<string>();
+  for (const candidate of [...preferred, ...fallback]) {
+    const key = `${candidate.sourceId}:${String(candidate.metadata?.recordIndex ?? "")}:${candidate.content}`;
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    merged.push(candidate);
+    if (merged.length >= maxCandidates) {
+      break;
+    }
+  }
+  return merged;
 }
