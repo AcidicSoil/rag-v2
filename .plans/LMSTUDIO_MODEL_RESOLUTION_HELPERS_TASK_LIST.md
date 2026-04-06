@@ -53,6 +53,12 @@ Current duplication:
      - auto-detect rerank loaded/downloaded-model preference
      - missing-model error paths for embedding and rerank helpers
 
+7. **Move helper to a neutral LM Studio shared package**
+   - Create `packages/lmstudio-shared/` for LM Studio-specific shared utilities.
+   - Move the model-resolution helper and `AUTO_DETECT_MODEL_ID` there.
+   - Update adapter and MCP imports to use the neutral shared package path.
+   - Remove the old adapter-local helper file so MCP no longer imports adapter internals.
+
 ## Current implementation focus
 - [x] Step 1: add shared helper module.
 - [x] Step 2: migrate adapter runtime.
@@ -60,10 +66,12 @@ Current duplication:
 - [x] Step 4: cleanup duplicated helpers.
 - [x] Step 5: validate with typechecks and smoke tests.
 - [x] Step 6: add focused helper-branch smoke coverage.
+- [x] Step 7: move helper to a neutral LM Studio shared package.
 
 ## Validation completed
 - `npm run typecheck:adapter`
 - `npm run typecheck:mcp`
+- `npm run typecheck:lmstudio-shared`
 - `npm run smoke:mcp`
 - `npm run smoke:lmstudio-model-resolution`
 
@@ -73,6 +81,6 @@ Current duplication:
 - Refactoring non-LM-Studio runtimes.
 
 ## Remaining follow-up options
-- Move `packages/adapter-lmstudio/src/lmstudioModelResolution.ts` to a more neutral shared location so MCP no longer imports from adapter internals.
+- Consider whether `lmstudioCoreBridge`, `modelRerank`, and related LM Studio-only helpers should also move out of adapter internals if MCP reuse grows further.
 - Decide whether embedding/rerank helper APIs should converge behind a more generic model-resolution abstraction.
 - Add runtime-level assertions for note text if stronger end-to-end fallback diagnostics coverage is desired beyond helper-level error-contract validation.

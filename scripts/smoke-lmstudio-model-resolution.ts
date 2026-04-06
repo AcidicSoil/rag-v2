@@ -1,9 +1,9 @@
-import { AUTO_DETECT_MODEL_ID } from "../packages/adapter-lmstudio/src/config";
+import { AUTO_DETECT_MODEL_ID } from "../packages/lmstudio-shared/src/modelResolution";
 import {
   resolveAutoDetectedEmbeddingModel,
   resolveEmbeddingModelForAdapter,
   resolveRerankLlmModel,
-} from "../packages/adapter-lmstudio/src/lmstudioModelResolution";
+} from "../packages/lmstudio-shared/src/modelResolution";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) {

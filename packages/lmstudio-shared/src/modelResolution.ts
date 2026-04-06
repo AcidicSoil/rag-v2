@@ -1,5 +1,6 @@
-import type { LMStudioClient, LLMDynamicHandle } from "@lmstudio/sdk";
-import { AUTO_DETECT_MODEL_ID } from "./config";
+import type { LLMDynamicHandle, LMStudioClient } from "@lmstudio/sdk";
+
+export const AUTO_DETECT_MODEL_ID = "AUTO_DETECT";
 
 export interface ResolvedEmbeddingModel {
   model: any;

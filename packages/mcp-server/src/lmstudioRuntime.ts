@@ -15,7 +15,7 @@ import { performModelAssistedRerank } from "../../adapter-lmstudio/src/modelRera
 import {
   resolveAutoDetectedEmbeddingModel,
   resolveRerankLlmModel,
-} from "../../adapter-lmstudio/src/lmstudioModelResolution";
+} from "../../lmstudio-shared/src/modelResolution";
 import type { RankedRetrievalEntry } from "../../adapter-lmstudio/src/types/rerank";
 import {
   browseFileSystem,

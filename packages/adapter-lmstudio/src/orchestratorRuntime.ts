@@ -30,7 +30,7 @@ import {
   resolveEmbeddingModelForAdapter,
   resolveRerankLlmModel,
   type ResolvedRerankModel,
-} from "./lmstudioModelResolution";
+} from "../../lmstudio-shared/src/modelResolution";
 
 function estimateTokens(value: string) {
   return Math.ceil(value.trim().length / 4);

@@ -30,10 +30,11 @@
     "eval": "npx -y tsx scripts/eval.ts",
     "mcp:stdio": "npm run stdio --workspace @rag-v2/mcp-server",
     "typecheck": "npm run typecheck:packages && npx -y -p typescript tsc --noEmit",
-    "typecheck:packages": "npm run typecheck:core && npm run typecheck:adapter && npm run typecheck:mcp",
+    "typecheck:packages": "npm run typecheck:core && npm run typecheck:adapter && npm run typecheck:mcp && npm run typecheck:lmstudio-shared",
     "typecheck:core": "npm run typecheck --workspace @rag-v2/core",
     "typecheck:adapter": "npm run typecheck --workspace @rag-v2/adapter-lmstudio",
-    "typecheck:mcp": "npm run typecheck --workspace @rag-v2/mcp-server"
+    "typecheck:mcp": "npm run typecheck --workspace @rag-v2/mcp-server",
+    "typecheck:lmstudio-shared": "npm run typecheck --workspace @rag-v2/lmstudio-shared"
   },
   "author": "AcidicSoil",
   "license": "ISC",

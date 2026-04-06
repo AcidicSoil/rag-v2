@@ -1,6 +1,7 @@
 import { createConfigSchematics } from "@lmstudio/sdk";
+import { AUTO_DETECT_MODEL_ID } from "../../lmstudio-shared/src/modelResolution";
 
-export const AUTO_DETECT_MODEL_ID = "AUTO_DETECT";
+export { AUTO_DETECT_MODEL_ID } from "../../lmstudio-shared/src/modelResolution";
 
 export const configSchematics = createConfigSchematics()
   .field(
@@ -122,29 +123,144 @@ export const configSchematics = createConfigSchematics()
     "numeric",
     {
       int: true,
-      min: 1,
-      max: 4,
+      min: 2,
+      max: 5,
       displayName: "Multi-Query Count",
-      subtitle: "Maximum number of query variants to run during retrieval.",
-      slider: { min: 1, max: 4, step: 1 },
+      subtitle: "How many rewrite variants to generate when multi-query is enabled.",
+      slider: { min: 2, max: 5, step: 1 },
     },
     3
+  )
+  .field(
+    "hybridEnabled",
+    "boolean",
+    {
+      displayName: "Hybrid Retrieval",
+      subtitle:
+        "Combine semantic retrieval with a lightweight lexical pass for better recall on exact terms.",
+    },
+    false
+  )
+  .field(
+    "semanticWeight",
+    "numeric",
+    {
+      min: 0.0,
+      max: 1.0,
+      displayName: "Hybrid Semantic Weight",
+      subtitle: "Blend weight for semantic scores in hybrid retrieval.",
+      slider: { min: 0.0, max: 1.0, step: 0.05 },
+    },
+    0.65
+  )
+  .field(
+    "lexicalWeight",
+    "numeric",
+    {
+      min: 0.0,
+      max: 1.0,
+      displayName: "Hybrid Lexical Weight",
+      subtitle: "Blend weight for lexical scores in hybrid retrieval.",
+      slider: { min: 0.0, max: 1.0, step: 0.05 },
+    },
+    0.35
+  )
+  .field(
+    "modelRerankEnabled",
+    "boolean",
+    {
+      displayName: "Model-Assisted Rerank",
+      subtitle:
+        "Use an LM Studio chat model to rescore the strongest retrieved chunks before answering.",
+    },
+    false
+  )
+  .field(
+    "modelRerankTopK",
+    "numeric",
+    {
+      int: true,
+      min: 2,
+      max: 8,
+      displayName: "Model Rerank Top K",
+      subtitle: "How many top retrieval candidates to rescore with the chat model.",
+      slider: { min: 2, max: 8, step: 1 },
+    },
+    5
+  )
+  .field(
+    "modelRerankMode",
+    "select",
+    {
+      displayName: "Rerank Model Source",
+      subtitle:
+        "Choose whether reranking uses the active chat model, auto-detects a local chat model, or loads a specific model ID.",
+      options: [
+        { value: "active-chat-model", displayName: "Use active chat model" },
+        { value: "auto-detect", displayName: "Auto-detect available chat model" },
+        { value: "manual-model-id", displayName: "Use manual rerank model ID" },
+      ],
+    },
+    "active-chat-model"
+  )
+  .field(
+    "modelRerankModelId",
+    "string",
+    {
+      displayName: "Manual Rerank Model ID",
+      subtitle:
+        "Optional explicit model ID for model-assisted reranking when manual mode is selected.",
+      placeholder: "e.g., lmstudio-community/Qwen2.5-7B-Instruct-GGUF",
+    },
+    ""
+  )
+  .field(
+    "strictGroundingMode",
+    "select",
+    {
+      displayName: "Strict Grounding Mode",
+      subtitle:
+        "Choose how strictly answers must stay tied to retrieved evidence.",
+      options: [
+        { value: "off", displayName: "Off" },
+        { value: "warn-on-weak-evidence", displayName: "Warn on weak evidence" },
+        { value: "require-evidence", displayName: "Require evidence" },
+      ],
+    },
+    "warn-on-weak-evidence"
+  )
+  .field(
+    "correctiveRetrievalEnabled",
+    "boolean",
+    {
+      displayName: "Corrective Retrieval",
+      subtitle:
+        "Retry retrieval with focused follow-up rewrites when initial evidence looks weak.",
+    },
+    false
+  )
+  .field(
+    "correctiveMaxAttempts",
+    "numeric",
+    {
+      int: true,
+      min: 0,
+      max: 4,
+      displayName: "Corrective Max Attempts",
+      subtitle: "Maximum number of corrective retrieval attempts.",
+      slider: { min: 0, max: 4, step: 1 },
+    },
+    1
   )
   .field(
     "fusionMethod",
     "select",
     {
       displayName: "Fusion Method",
-      subtitle: "How to combine results from multiple retrieval queries.",
+      subtitle: "How retrieval results from multiple queries are merged.",
       options: [
-        {
-          value: "reciprocal-rank-fusion",
-          displayName: "Reciprocal rank fusion",
-        },
-        {
-          value: "max-score",
-          displayName: "Max score",
-        },
+        { value: "reciprocal-rank-fusion", displayName: "Reciprocal Rank Fusion" },
+        { value: "max-score", displayName: "Max score" },
       ],
     },
     "reciprocal-rank-fusion"
@@ -157,68 +273,57 @@ export const configSchematics = createConfigSchematics()
       min: 1,
       max: 20,
       displayName: "Max Candidates Before Rerank",
-      subtitle:
-        "Maximum number of fused retrieval candidates to keep before later reranking work is added.",
-      slider: { min: 1, max: 20, step: 1 },
-    },
-    6
-    )
-  .field(
-    "hybridEnabled",
-    "boolean",
-    {
-      displayName: "Hybrid Retrieval",
-      subtitle:
-        "Blend semantic retrieval with local lexical candidate scoring over parsed file content.",
-    },
-    false
-  )
-  .field(
-    "lexicalWeight",
-    "numeric",
-    {
-      min: 0.0,
-      max: 1.0,
-      displayName: "Lexical Weight",
-      subtitle: "Weight assigned to local lexical candidates in hybrid retrieval.",
-      slider: { min: 0.0, max: 1.0, step: 0.05 },
-    },
-    0.35
-  )
-  .field(
-    "semanticWeight",
-    "numeric",
-    {
-      min: 0.0,
-      max: 1.0,
-      displayName: "Semantic Weight",
-      subtitle: "Weight assigned to semantic retrieval candidates in hybrid retrieval.",
-      slider: { min: 0.0, max: 1.0, step: 0.05 },
-    },
-    0.65
-  )
-  .field(
-    "hybridCandidateCount",
-    "numeric",
-    {
-      int: true,
-      min: 1,
-      max: 20,
-      displayName: "Hybrid Candidate Count",
-      subtitle: "Maximum number of merged semantic and lexical candidates to keep.",
+      subtitle: "Maximum number of retrieval candidates to keep before reranking.",
       slider: { min: 1, max: 20, step: 1 },
     },
     8
   )
   .field(
+    "maxEvidenceBlocks",
+    "numeric",
+    {
+      int: true,
+      min: 1,
+      max: 20,
+      displayName: "Max Evidence Blocks",
+      subtitle: "Maximum number of evidence blocks to carry into answer composition.",
+      slider: { min: 1, max: 20, step: 1 },
+    },
+    8
+  )
+  .field(
+    "dedupeSimilarityThreshold",
+    "numeric",
+    {
+      min: 0.0,
+      max: 1.0,
+      displayName: "Dedupe Similarity Threshold",
+      subtitle: "Similarity threshold for collapsing near-duplicate evidence chunks.",
+      slider: { min: 0.0, max: 1.0, step: 0.01 },
+    },
+    0.92
+  )
+  .field(
     "rerankEnabled",
     "boolean",
     {
-      displayName: "Rerank Fused Candidates",
-      subtitle:
-        "Apply a heuristic reranker so evidence selection favors support quality and diversity, not just similarity.",
+      displayName: "Rerank Retrieved Chunks",
+      subtitle: "Enable reranking before evidence selection.",
     },
     true
+  )
+  .field(
+    "rerankStrategy",
+    "select",
+    {
+      displayName: "Rerank Strategy",
+      subtitle: "Choose the reranking approach to apply to retrieved chunks.",
+      options: [
+        { value: "heuristic-v1", displayName: "Heuristic v1" },
+        { value: "heuristic-then-llm", displayName: "Heuristic then LLM" },
+      ],
+    },
+    "heuristic-v1"
   )
   .field(
     "rerankTopK",
@@ -228,195 +333,40 @@ export const configSchematics = createConfigSchematics()
       min: 1,
       max: 20,
       displayName: "Rerank Top K",
-      subtitle: "Number of fused candidates to keep after reranking.",
+      subtitle: "How many top retrieval candidates to send into reranking.",
       slider: { min: 1, max: 20, step: 1 },
     },
-    4
-  )
-  .field(
-    "rerankStrategy",
-    "select",
-    {
-      displayName: "Rerank Strategy",
-      subtitle: "Choose how fused retrieval candidates are reranked before evidence packaging.",
-      options: [
-        {
-          value: "heuristic-v1",
-          displayName: "Heuristic v1",
-        },
-        {
-          value: "heuristic-then-llm",
-          displayName: "Heuristic then LLM",
-        },
-      ],
-    },
-    "heuristic-v1"
-  )
-  .field(
-    "modelRerankTopK",
-    "numeric",
-    {
-      int: true,
-      min: 1,
-      max: 10,
-      displayName: "Model Rerank Top K",
-      subtitle: "Number of top heuristic candidates to rescore with an LLM when model-assisted reranking is enabled.",
-      slider: { min: 1, max: 10, step: 1 },
-    },
-    3
-  )
-  .field(
-    "modelRerankMode",
-    "select",
-    {
-      displayName: "Model Rerank Model Source",
-      subtitle:
-        "Choose whether model-assisted reranking uses the active chat model, a manually specified LLM, or an auto-detected local LLM.",
-      options: [
-        {
-          value: "active-chat-model",
-          displayName: "Active/default chat model",
-        },
-        {
-          value: "auto-detect",
-          displayName: "Auto-detect loaded/downloaded LLM",
-        },
-        {
-          value: "manual-model-id",
-          displayName: "Manual model ID",
-        },
-      ],
-    },
-    "active-chat-model"
-  )
-  .field(
-    "modelRerankModelId",
-    "string",
-    {
-      displayName: "Model Rerank Model ID",
-      subtitle:
-        "Used when the rerank model source is set to Manual model ID. This config powers LLM-assisted reranking only.",
-      placeholder: "e.g., qwen2.5-7b-instruct",
-    },
-    ""
-  )
-  .field(
-    "dedupeSimilarityThreshold",
-    "numeric",
-    {
-      min: 0.0,
-      max: 1.0,
-      displayName: "Evidence Dedupe Threshold",
-      subtitle:
-        "Similarity threshold used to drop near-duplicate retrieved evidence from the same file.",
-      slider: { min: 0.0, max: 1.0, step: 0.01 },
-    },
-    0.85
-  )
-  .field(
-    "maxEvidenceBlocks",
-    "numeric",
-    {
-      int: true,
-      min: 1,
-      max: 10,
-      displayName: "Max Evidence Blocks",
-      subtitle: "Maximum number of deduplicated evidence blocks to inject into the prompt.",
-      slider: { min: 1, max: 10, step: 1 },
-    },
-    4
+    5
   )
   .field(
     "sanitizeRetrievedText",
     "boolean",
     {
       displayName: "Sanitize Retrieved Text",
-      subtitle:
-        "Normalize retrieved text before injection to reduce noisy markup and formatting artifacts.",
+      subtitle: "Clean retrieved passages before they are used in prompting or evidence output.",
     },
-    true
+    false
   )
   .field(
     "stripInstructionalSpans",
     "boolean",
     {
-      displayName: "Strip Instruction-Like Spans",
-      subtitle:
-        "Replace obviously instruction-like retrieved text with a neutral placeholder before injection.",
+      displayName: "Strip Instructional Spans",
+      subtitle: "Remove instruction-like spans from retrieved text during sanitization.",
     },
-    true
+    false
   )
   .field(
-    "strictGroundingMode",
-    "select",
-    {
-      displayName: "Strict Grounding Mode",
-      subtitle:
-        "Control how strongly the injected prompt should constrain the model to retrieved evidence.",
-      options: [
-        {
-          value: "off",
-          displayName: "Off",
-        },
-        {
-          value: "warn-on-weak-evidence",
-          displayName: "Warn on weak evidence",
-        },
-        {
-          value: "require-evidence",
-          displayName: "Require evidence",
-        }
-      ],
-    },
-    "warn-on-weak-evidence"
-  )
-  .field(
-    "correctiveRetrievalEnabled",
-    "boolean",
-    {
-      displayName: "Corrective Retrieval",
-      subtitle:
-        "Retry retrieval with aspect-focused rewrites when the first evidence set looks weak or incomplete.",
-    },
-    true
-  )
-  .field(
-    "correctiveMaxAttempts",
+    "hybridCandidateCount",
     "numeric",
     {
       int: true,
-      min: 0,
-      max: 2,
-      displayName: "Corrective Attempts",
-      subtitle: "Maximum number of corrective retrieval retries after the initial pass.",
-      slider: { min: 0, max: 2, step: 1 },
+      min: 1,
+      max: 20,
+      displayName: "Hybrid Candidate Count",
+      subtitle: "Maximum number of candidates to keep in the hybrid retrieval branch.",
+      slider: { min: 1, max: 20, step: 1 },
     },
-    1
-  )
-  .field(
-    "correctiveMinEvidenceScore",
-    "numeric",
-    {
-      min: 0.0,
-      max: 1.0,
-      displayName: "Corrective Min Evidence Score",
-      subtitle:
-        "Trigger a corrective retry when the average retained evidence score falls below this threshold.",
-      slider: { min: 0.0, max: 1.0, step: 0.01 },
-    },
-    0.6
-  )
-  .field(
-    "correctiveMinAspectCoverage",
-    "numeric",
-    {
-      min: 0.0,
-      max: 1.0,
-      displayName: "Corrective Min Aspect Coverage",
-      subtitle:
-        "Trigger a corrective retry when retrieved evidence appears to cover too little of a multi-part query.",
-      slider: { min: 0.0, max: 1.0, step: 0.05 },
-    },
-    0.6
+    8
   )
   .build();
