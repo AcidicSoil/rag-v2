@@ -1,0 +1,21 @@
+# Project Overview
+
+- Name: `rag-v2` / package `lms-plugin-rag-v2`
+- Purpose: LM Studio prompt-preprocessor plugin that adds retrieval-augmented generation behavior for attached documents. It chooses between injecting full file content for small inputs or retrieving relevant chunks with an embedding model for larger inputs.
+- Tech stack: TypeScript, Node runner plugin for LM Studio, `@lmstudio/sdk`, `zod`.
+- Main artifact metadata:
+  - `manifest.json`: plugin artifact (`type: plugin`, `runner: node`, owner `dirty-data`, name `rag-v2`, revision `6`)
+  - `package.json`: dev flow is centered around `lms dev` and `lms push`
+- Rough structure:
+  - `src/index.ts`: plugin entrypoint, registers config and prompt preprocessor
+  - `src/config.ts`: plugin configuration schema / UI fields
+  - `src/promptPreprocessor.ts`: core RAG logic, document parsing, retrieval, context strategy selection, citations, model handling
+  - `lmstudio-docs-3-30-26/`: bundled LM Studio docs snapshot
+- Current repo state observations:
+  - Small codebase, no test suite present
+  - No local dependencies installed in this checkout (`npm ls --depth=0` reports all package deps missing)
+  - TypeScript compiler is not installed as a project dependency, so standalone `tsc --noEmit` is not currently available without adding `typescript`
+- Likely maintenance focus:
+  - Refresh SDK / plugin compatibility with current LM Studio docs and runtime
+  - Reinstall dependencies and verify local build/dev flow with `lms dev`
+  - Fix compile/runtime drift in prompt preprocessor implementation

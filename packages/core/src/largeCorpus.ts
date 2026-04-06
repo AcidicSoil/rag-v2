@@ -623,43 +623,26 @@ function buildStructuredSynopsisSummary(
   const fieldCounts = new Map<string, number>();
   const sampleValues = new Map<string, Set<string>>();
 
-  for (const window of [synopsis.sampleHead, synopsis.sampleTail]) {
-    if (!window) {
-      continue;
-    }
-    for (const line of window.split(/\r?\n/)) {
-      const trimmed = line.trim();
-      if (!trimmed) {
+  for (const record of parseStructuredSynopsisSampleRecords(synopsis)) {
+    for (const [key, value] of Object.entries(record)) {
+      fieldCounts.set(key, (fieldCounts.get(key) ?? 0) + 1);
+      if (
+        typeof value !== "string" &&
+        typeof value !== "number" &&
+        typeof value !== "boolean"
+      ) {
         continue;
       }
-      try {
-        const parsed = JSON.parse(trimmed) as Record<string, unknown>;
-        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-          continue;
-        }
-        for (const [key, value] of Object.entries(parsed)) {
-          fieldCounts.set(key, (fieldCounts.get(key) ?? 0) + 1);
-          if (
-            typeof value !== "string" &&
-            typeof value !== "number" &&
-            typeof value !== "boolean"
-          ) {
-            continue;
-          }
-          const normalizedValue = truncateForMetadata(String(value), 80);
-          if (!normalizedValue) {
-            continue;
-          }
-          if (!sampleValues.has(key)) {
-            sampleValues.set(key, new Set<string>());
-          }
-          const values = sampleValues.get(key);
-          if (values && values.size < 4) {
-            values.add(normalizedValue);
-          }
-        }
-      } catch {
+      const normalizedValue = truncateForMetadata(String(value), 80);
+      if (!normalizedValue) {
         continue;
+      }
+      if (!sampleValues.has(key)) {
+        sampleValues.set(key, new Set<string>());
+      }
+      const values = sampleValues.get(key);
+      if (values && values.size < 4) {
+        values.add(normalizedValue);
       }
     }
   }
@@ -714,6 +697,188 @@ function buildStructuredSynopsisSummary(
   };
 }
 
+function buildStructuredAggregateSummaryDocuments(
+  synopsis: RagFileSynopsis
+): Array<RagDocument> {
+  if (synopsis.format !== "jsonl") {
+    return [];
+  }
+
+  const records = parseStructuredSynopsisSampleRecords(synopsis);
+  if (records.length === 0) {
+    return [];
+  }
+
+  const topicCounts = new Map<string, number>();
+  const timeBucketCounts = new Map<string, number>();
+  const entitySamples = new Map<string, Set<string>>();
+
+  for (const record of records) {
+    const topic = firstScalar(record, ["topic", "subject"]);
+    if (topic) {
+      topicCounts.set(topic, (topicCounts.get(topic) ?? 0) + 1);
+    }
+
+    const timestamp = firstScalar(record, ["timestamp", "created_at", "createdAt", "time", "date"]);
+    const timeBucket = timestamp ? normalizeTimeBucket(timestamp) : undefined;
+    if (timeBucket) {
+      timeBucketCounts.set(timeBucket, (timeBucketCounts.get(timeBucket) ?? 0) + 1);
+    }
+
+    for (const [label, aliases] of [
+      ["conversation ids", ["conversation_id", "conversationId", "session_id", "sessionId"]],
+      ["message ids", ["message_id", "messageId", "id"]],
+      ["users", ["user_id", "userId"]],
+      ["roles", ["role"]],
+    ] as Array<[string, Array<string>]>) {
+      const value = firstScalar(record, aliases);
+      if (!value) {
+        continue;
+      }
+      if (!entitySamples.has(label)) {
+        entitySamples.set(label, new Set<string>());
+      }
+      const values = entitySamples.get(label);
+      if (values && values.size < 6) {
+        values.add(value);
+      }
+    }
+  }
+
+  const documents: Array<RagDocument> = [];
+  const topTopics = formatTopSampledCounts(topicCounts, 8);
+  if (topTopics.length > 0) {
+    documents.push({
+      id: `structured-topic-summary:${synopsis.resolvedPath}`,
+      name: `structured-topic-summary:${synopsis.path}`,
+      content: [
+        `Structured topic summary for: ${synopsis.path}`,
+        `Sampled topics: ${topTopics.join(", ")}`,
+        `Based on sampled JSONL windows from the file synopsis.`,
+      ].join("\n"),
+      metadata: {
+        sourceType: "structured-topic-summary",
+        path: synopsis.path,
+        format: synopsis.format,
+      },
+    });
+  }
+
+  const topTimeBuckets = formatTopSampledCounts(timeBucketCounts, 8);
+  if (topTimeBuckets.length > 0) {
+    documents.push({
+      id: `structured-time-summary:${synopsis.resolvedPath}`,
+      name: `structured-time-summary:${synopsis.path}`,
+      content: [
+        `Structured time summary for: ${synopsis.path}`,
+        `Sampled time buckets: ${topTimeBuckets.join(", ")}`,
+        `Based on sampled JSONL windows from the file synopsis.`,
+      ].join("\n"),
+      metadata: {
+        sourceType: "structured-time-summary",
+        path: synopsis.path,
+        format: synopsis.format,
+      },
+    });
+  }
+
+  const entityLines = [...entitySamples.entries()]
+    .map(([label, values]) => `${label}: ${[...values].join(", ")}`)
+    .slice(0, 4);
+  if (entityLines.length > 0) {
+    documents.push({
+      id: `structured-entity-summary:${synopsis.resolvedPath}`,
+      name: `structured-entity-summary:${synopsis.path}`,
+      content: [
+        `Structured entity summary for: ${synopsis.path}`,
+        ...entityLines,
+        `Based on sampled JSONL windows from the file synopsis.`,
+      ].join("\n"),
+      metadata: {
+        sourceType: "structured-entity-summary",
+        path: synopsis.path,
+        format: synopsis.format,
+      },
+    });
+  }
+
+  return documents;
+}
+
+function parseStructuredSynopsisSampleRecords(
+  synopsis: RagFileSynopsis
+): Array<Record<string, unknown>> {
+  if (synopsis.format !== "jsonl") {
+    return [];
+  }
+
+  const records: Array<Record<string, unknown>> = [];
+  for (const window of [synopsis.sampleHead, synopsis.sampleTail]) {
+    if (!window) {
+      continue;
+    }
+
+    const directLines = window.split(/\r?\n/);
+    const candidates = directLines.length > 1
+      ? directLines
+      : Array.from(window.matchAll(/\{[^{}]+\}/g)).map((match) => match[0]);
+
+    for (const candidate of candidates) {
+      const trimmed = candidate.trim();
+      if (!trimmed) {
+        continue;
+      }
+      try {
+        const parsed = JSON.parse(trimmed) as Record<string, unknown>;
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+          continue;
+        }
+        records.push(parsed);
+      } catch {
+        continue;
+      }
+    }
+  }
+  return records;
+}
+
+function firstScalar(record: Record<string, unknown>, aliases: Array<string>): string | undefined {
+  for (const alias of aliases) {
+    const value = record[alias];
+    if (
+      typeof value === "string" ||
+      typeof value === "number" ||
+      typeof value === "boolean"
+    ) {
+      const normalized = truncateForMetadata(String(value), 80);
+      if (normalized) {
+        return normalized;
+      }
+    }
+  }
+  return undefined;
+}
+
+function normalizeTimeBucket(value: string): string | undefined {
+  const trimmed = value.trim();
+  const fullDateMatch = trimmed.match(/\b(\d{4}-\d{2}-\d{2})\b/);
+  if (fullDateMatch) {
+    return fullDateMatch[1];
+  }
+  const monthMatch = trimmed.match(/\b(\d{4}-\d{2})\b/);
+  if (monthMatch) {
+    return monthMatch[1];
+  }
+  return undefined;
+}
+
+function formatTopSampledCounts(counts: Map<string, number>, limit: number): Array<string> {
+  return [...counts.entries()]
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+    .slice(0, limit)
+    .map(([value, count]) => `${value} (${count})`);
+}
+
 function buildSummaryDocuments(
   manifests: Array<RagDirectoryManifest>,
   synopses: Array<RagFileSynopsis>
@@ -747,6 +912,7 @@ function buildSummaryDocuments(
     if (structuredSummary) {
       documents.push(structuredSummary);
     }
+    documents.push(...buildStructuredAggregateSummaryDocuments(synopsis));
 
     documents.push({
       id: `synopsis:${synopsis.resolvedPath}`,

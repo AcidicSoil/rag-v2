@@ -64,6 +64,8 @@ async function main() {
             content: Array.from({ length: 9000 }, (_, index) =>
               JSON.stringify({
                 conversation_id: `conv-${index + 1}`,
+                user_id: index % 3 === 0 ? "user-a" : "user-b",
+                timestamp: `2025-02-${String((index % 5) + 1).padStart(2, "0")}T12:00:00Z`,
                 topic: index % 2 === 0 ? "billing" : "support",
                 content: "Attached export record with repeated structured chat content.",
               })
@@ -89,6 +91,22 @@ async function main() {
     assert(
       attachedDocumentResult.preparedPrompt.includes("Observed fields:"),
       "Expected attached-document synopsis context to expose observed JSONL fields."
+    );
+    assert(
+      attachedDocumentResult.preparedPrompt.includes("structured-topic-summary:dataset-export-1.jsonl") &&
+        attachedDocumentResult.preparedPrompt.includes("billing") &&
+        attachedDocumentResult.preparedPrompt.includes("support"),
+      "Expected attached-document summary context to include sampled topic summaries for structured JSONL corpora."
+    );
+    assert(
+      attachedDocumentResult.preparedPrompt.includes("structured-time-summary:dataset-export-1.jsonl") &&
+        attachedDocumentResult.preparedPrompt.includes("2025-02-"),
+      "Expected attached-document summary context to include sampled time summaries for structured JSONL corpora."
+    );
+    assert(
+      attachedDocumentResult.preparedPrompt.includes("structured-entity-summary:dataset-export-1.jsonl") &&
+        attachedDocumentResult.preparedPrompt.includes("user-a"),
+      "Expected attached-document summary context to include sampled entity summaries for structured JSONL corpora."
     );
     assert(
       attachedDocumentResult.diagnostics.notes?.some((note) => note.includes("document analysis classified")),
