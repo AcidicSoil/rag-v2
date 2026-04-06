@@ -502,27 +502,38 @@ async function finalizeCandidates(
   runtime: RagOrchestratorRuntime,
   diagnostics: RagDiagnostics
 ): Promise<Array<RagCandidate>> {
+  const rerankEnabled = options.rerank?.enabled ?? true;
   const rerankStrategy = options.rerank?.strategy ?? "heuristic-v1";
-  const rerankTopK = options.rerank?.topK ?? options.retrieval?.maxEvidenceBlocks ?? DEFAULT_MAX_EVIDENCE_BLOCKS;
+  const rerankTopK =
+    options.rerank?.topK ??
+    options.retrieval?.maxEvidenceBlocks ??
+    DEFAULT_MAX_EVIDENCE_BLOCKS;
 
-  const heuristic = rerankRagCandidates(query, candidates, {
-    topK: rerankTopK,
-    strategy: rerankStrategy,
-  }).map((ranked) => ({
-    ...ranked.candidate,
-    score: ranked.rerankScore,
-  }));
+  let rerankedCandidates = candidates;
 
-  let rerankedCandidates = heuristic.length > 0 ? heuristic : candidates;
+  if (rerankEnabled) {
+    const heuristic = rerankRagCandidates(query, candidates, {
+      topK: rerankTopK,
+      strategy: rerankStrategy,
+    }).map((ranked) => ({
+      ...ranked.candidate,
+      score: ranked.rerankScore,
+    }));
 
-  if (runtime.llmReranker && rerankStrategy === "heuristic-then-llm") {
-    const llmRerankResult = await runtime.llmReranker.rerank({
-      query,
-      candidates: rerankedCandidates,
-      options,
-    });
-    rerankedCandidates = llmRerankResult.candidates;
-    diagnostics.notes?.push(...(llmRerankResult.notes ?? []));
+    rerankedCandidates = heuristic.length > 0 ? heuristic : candidates;
+    diagnostics.notes?.push(`Rerank enabled using strategy ${rerankStrategy}.`);
+
+    if (runtime.llmReranker && rerankStrategy === "heuristic-then-llm") {
+      const llmRerankResult = await runtime.llmReranker.rerank({
+        query,
+        candidates: rerankedCandidates,
+        options,
+      });
+      rerankedCandidates = llmRerankResult.candidates;
+      diagnostics.notes?.push(...(llmRerankResult.notes ?? []));
+    }
+  } else {
+    diagnostics.notes?.push("Rerank disabled; preserving retrieval order before dedupe.");
   }
 
   return dedupeRagCandidates(

@@ -266,12 +266,36 @@ export const configSchematics = createConfigSchematics()
     3
   )
   .field(
+    "modelRerankMode",
+    "select",
+    {
+      displayName: "Model Rerank Model Source",
+      subtitle:
+        "Choose whether model-assisted reranking uses the active chat model, a manually specified LLM, or an auto-detected local LLM.",
+      options: [
+        {
+          value: "active-chat-model",
+          displayName: "Active/default chat model",
+        },
+        {
+          value: "auto-detect",
+          displayName: "Auto-detect loaded/downloaded LLM",
+        },
+        {
+          value: "manual-model-id",
+          displayName: "Manual model ID",
+        },
+      ],
+    },
+    "active-chat-model"
+  )
+  .field(
     "modelRerankModelId",
     "string",
     {
-      displayName: "Model Rerank Model ID (Optional)",
+      displayName: "Model Rerank Model ID",
       subtitle:
-        "Optional LLM model ID to use for model-assisted reranking. Leave empty to use the active/default LM Studio chat model.",
+        "Used when the rerank model source is set to Manual model ID. This config powers LLM-assisted reranking only.",
       placeholder: "e.g., qwen2.5-7b-instruct",
     },
     ""

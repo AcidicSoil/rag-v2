@@ -16,6 +16,7 @@
     "smoke:evidence": "npx -y tsx scripts/smoke-evidence.ts",
     "smoke:safety": "npx -y tsx scripts/smoke-safety.ts",
     "smoke:rerank": "npx -y tsx scripts/smoke-rerank.ts",
+    "smoke:rerank-config": "npx -y tsx scripts/smoke-rerank-config.ts",
     "smoke:hybrid": "npx -y tsx scripts/smoke-hybrid.ts",
     "smoke:corrective": "npx -y tsx scripts/smoke-corrective.ts",
     "smoke:core": "npx -y tsx scripts/smoke-core-pipeline.ts",

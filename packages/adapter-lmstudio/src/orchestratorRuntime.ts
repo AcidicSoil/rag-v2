@@ -83,6 +83,14 @@ export function createLmStudioAdapterRuntime(
   cleanup: () => Promise<void>;
 } {
   let embeddingModelPromise: Promise<any> | undefined;
+  let rerankModelPromise:
+    | Promise<{
+        model: LLMDynamicHandle;
+        modelId?: string;
+        source: "active-chat-model" | "configured" | "auto-detected";
+        autoUnload: boolean;
+      }>
+    | undefined;
   let parsedDocumentsPromise:
     | Promise<Array<{ file: FileHandle; content: string }>>
     | undefined;
@@ -128,6 +136,88 @@ export function createLmStudioAdapterRuntime(
     }
 
     return embeddingModelPromise;
+  };
+
+  const resolveRerankModel = async () => {
+    if (!rerankModelPromise) {
+      rerankModelPromise = (async () => {
+        const rerankMode =
+          (pluginConfig.get("modelRerankMode") as string | undefined) ??
+          "active-chat-model";
+        const manualModelId = String(
+          pluginConfig.get("modelRerankModelId") ?? ""
+        ).trim();
+        const shouldAutoUnload = Boolean(pluginConfig.get("autoUnload"));
+
+        if (rerankMode === "manual-model-id") {
+          if (!manualModelId) {
+            throw new Error(
+              "Model-assisted rerank is set to manual model mode but no rerank model ID is configured."
+            );
+          }
+
+          return {
+            model: (await ctl.client.llm.model(manualModelId, {
+              signal: ctl.abortSignal,
+            })) as LLMDynamicHandle,
+            modelId: manualModelId,
+            source: "configured" as const,
+            autoUnload: shouldAutoUnload,
+          };
+        }
+
+        if (rerankMode === "auto-detect") {
+          const loadedModels =
+            typeof ctl.client.llm.listLoaded === "function"
+              ? await ctl.client.llm.listLoaded()
+              : [];
+          if (loadedModels.length > 0) {
+            return {
+              model: loadedModels[0] as LLMDynamicHandle,
+              modelId: (loadedModels[0] as any)?.identifier,
+              source: "auto-detected" as const,
+              autoUnload: false,
+            };
+          }
+
+          const downloadedModels = await ctl.client.system.listDownloadedModels("llm");
+          const found =
+            downloadedModels.find((model) => {
+              const candidate = `${model.modelKey} ${model.path} ${model.displayName}`.toLowerCase();
+              return (
+                candidate.includes("instruct") ||
+                candidate.includes("chat") ||
+                candidate.includes("assistant")
+              );
+            }) ?? downloadedModels[0];
+
+          if (!found) {
+            throw new Error(
+              "No LLM model found for model-assisted reranking. Please download one in LM Studio."
+            );
+          }
+
+          return {
+            model: (await ctl.client.llm.model(found.modelKey, {
+              signal: ctl.abortSignal,
+            })) as LLMDynamicHandle,
+            modelId: found.modelKey,
+            source: "auto-detected" as const,
+            autoUnload: shouldAutoUnload,
+          };
+        }
+
+        const model = (await ctl.client.llm.model()) as LLMDynamicHandle;
+        return {
+          model,
+          modelId: undefined,
+          source: "active-chat-model" as const,
+          autoUnload: false,
+        };
+      })();
+    }
+
+    return rerankModelPromise;
   };
 
   const resolveParsedDocuments = async () => {
@@ -248,13 +338,8 @@ export function createLmStudioAdapterRuntime(
       async rerank({ query, candidates, options }) {
         const topK = options?.rerank?.topK ?? pluginConfig.get("rerankTopK");
         const modelRerankTopK = pluginConfig.get("modelRerankTopK");
-        const modelRerankModelId = pluginConfig.get("modelRerankModelId");
         try {
-          const rerankModel = modelRerankModelId.trim()
-            ? await ctl.client.llm.model(modelRerankModelId.trim(), {
-                signal: ctl.abortSignal,
-              })
-            : ((await ctl.client.llm.model()) as LLMDynamicHandle);
+          const rerankResolution = await resolveRerankModel();
           const heuristicEntries: Array<RankedRetrievalEntry> = toRetrievalResultEntries(candidates)
             .slice(0, modelRerankTopK)
             .map((entry) => ({
@@ -270,7 +355,7 @@ export function createLmStudioAdapterRuntime(
               },
             }));
           const modelAssisted = await performModelAssistedRerank(
-            rerankModel,
+            rerankResolution.model,
             query,
             heuristicEntries,
             topK,
@@ -284,7 +369,7 @@ export function createLmStudioAdapterRuntime(
               }))
             ),
             notes: [
-              `Model-assisted rerank parsed ${modelAssisted.parsedScores.length} scores from response: ${modelAssisted.rawResponse}`,
+              `Model-assisted rerank used ${rerankResolution.modelId ?? "active chat model"} (${rerankResolution.source}) and parsed ${modelAssisted.parsedScores.length} scores from response: ${modelAssisted.rawResponse}`,
             ],
           };
         } catch (error) {
@@ -293,7 +378,9 @@ export function createLmStudioAdapterRuntime(
           );
           return {
             candidates,
-            notes: ["Model-assisted rerank failed; heuristic order retained."],
+            notes: [
+              `Model-assisted rerank failed; heuristic order retained. ${error instanceof Error ? error.message : String(error)}`,
+            ],
           };
         }
       },
@@ -373,12 +460,18 @@ export function createLmStudioAdapterRuntime(
   return {
     runtime,
     async cleanup() {
-      if (!pluginConfig.get("autoUnload") || !embeddingModelPromise) {
-        return;
+      if (pluginConfig.get("autoUnload") && embeddingModelPromise) {
+        const embeddingModel = await embeddingModelPromise;
+        await embeddingModel.unload();
       }
 
-      const model = await embeddingModelPromise;
-      await model.unload();
+      if (rerankModelPromise) {
+        const rerankModel = await rerankModelPromise;
+        const unload = (rerankModel.model as any)?.unload;
+        if (rerankModel.autoUnload && typeof unload === "function") {
+          await unload.call(rerankModel.model);
+        }
+      }
     },
   };
 }
