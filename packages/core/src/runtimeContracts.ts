@@ -141,6 +141,42 @@ export interface FileSystemBrowseResponse {
   errors?: Array<string>;
 }
 
+export interface FileInfoRequest {
+  path: string;
+}
+
+export interface FileInfoResponse {
+  requestedPath: string;
+  resolvedPath: string;
+  cwd: string;
+  exists: boolean;
+  type?: "file" | "directory";
+  sizeBytes?: number;
+  extension?: string;
+  textLike?: boolean;
+  childCount?: number;
+  errors?: Array<string>;
+}
+
+export interface ReadFileRequest {
+  path: string;
+  startLine?: number;
+  maxLines?: number;
+  maxChars?: number;
+}
+
+export interface ReadFileResponse {
+  requestedPath: string;
+  resolvedPath: string;
+  cwd: string;
+  exists: boolean;
+  startLine?: number;
+  endLine?: number;
+  content?: string;
+  truncated: boolean;
+  errors?: Array<string>;
+}
+
 export interface RagLoadedCorpus {
   documents: Array<RagDocument>;
   candidates?: Array<RagCandidate>;
@@ -245,6 +281,8 @@ export interface RagInspector {
 
 export interface RagFileSystemBrowser {
   browse(input: FileSystemBrowseRequest): Promise<FileSystemBrowseResponse>;
+  fileInfo(input: FileInfoRequest): Promise<FileInfoResponse>;
+  readFile(input: ReadFileRequest): Promise<ReadFileResponse>;
 }
 
 export interface RagDocumentLoader {
@@ -299,6 +337,8 @@ export interface RagToolHandlerSet {
   corpusInspect(input: CorpusInspectRequest): Promise<CorpusInspectResponse>;
   rerankOnly(input: RerankOnlyRequest): Promise<RerankOnlyResponse>;
   filesystemBrowse(input: FileSystemBrowseRequest): Promise<FileSystemBrowseResponse>;
+  fileInfo(input: FileInfoRequest): Promise<FileInfoResponse>;
+  readFile(input: ReadFileRequest): Promise<ReadFileResponse>;
 }
 
 export interface RagOrchestrator {

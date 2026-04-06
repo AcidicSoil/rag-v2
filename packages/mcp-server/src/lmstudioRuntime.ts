@@ -17,6 +17,8 @@ import type { RankedRetrievalEntry } from "../../adapter-lmstudio/src/types/rera
 import {
   browseFileSystem,
   discoverSupportedTextFiles,
+  fileInfo,
+  readTextFileRange,
   resolveUserPath,
 } from "./pathResolution";
 
@@ -233,6 +235,12 @@ export async function createLmStudioMcpRuntime(): Promise<RagMcpRuntime> {
     browser: {
       async browse(input) {
         return browseFileSystem(input);
+      },
+      async fileInfo(input) {
+        return fileInfo(input);
+      },
+      async readFile(input) {
+        return readTextFileRange(input);
       },
     },
   };

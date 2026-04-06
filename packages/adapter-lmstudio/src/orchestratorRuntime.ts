@@ -368,6 +368,35 @@ export function createLmStudioAdapterRuntime(
           errors: ["Filesystem browsing is only exposed through the MCP server runtime in this phase."],
         };
       },
+      async fileInfo(input) {
+        const normalizedPath = input.path === "~"
+          ? require("node:os").homedir()
+          : input.path.startsWith("~/")
+            ? require("node:path").join(require("node:os").homedir(), input.path.slice(2))
+            : require("node:path").resolve(input.path);
+        return {
+          requestedPath: input.path,
+          resolvedPath: normalizedPath,
+          cwd: process.cwd(),
+          exists: false,
+          errors: ["Filesystem inspection is only exposed through the MCP server runtime in this phase."],
+        };
+      },
+      async readFile(input) {
+        const normalizedPath = input.path === "~"
+          ? require("node:os").homedir()
+          : input.path.startsWith("~/")
+            ? require("node:path").join(require("node:os").homedir(), input.path.slice(2))
+            : require("node:path").resolve(input.path);
+        return {
+          requestedPath: input.path,
+          resolvedPath: normalizedPath,
+          cwd: process.cwd(),
+          exists: false,
+          truncated: false,
+          errors: ["Filesystem text reading is only exposed through the MCP server runtime in this phase."],
+        };
+      },
     },
   };
 

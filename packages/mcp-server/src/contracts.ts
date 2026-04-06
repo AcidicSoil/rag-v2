@@ -186,6 +186,17 @@ export const filesystemBrowseInputSchema = z.object({
   includeHidden: z.boolean().optional(),
 });
 
+export const fileInfoInputSchema = z.object({
+  path: z.string().min(1),
+});
+
+export const readFileInputSchema = z.object({
+  path: z.string().min(1),
+  startLine: z.number().int().min(0).optional(),
+  maxLines: z.number().int().min(1).max(2000).optional(),
+  maxChars: z.number().int().min(1).max(200000).optional(),
+});
+
 export const ragEvidenceBlockSchema = z.object({
   label: z.string(),
   fileName: z.string(),
@@ -253,15 +264,44 @@ export const filesystemBrowseOutputSchema = z.object({
   errors: z.array(z.string()).optional(),
 });
 
+export const fileInfoOutputSchema = z.object({
+  requestedPath: z.string(),
+  resolvedPath: z.string(),
+  cwd: z.string(),
+  exists: z.boolean(),
+  type: z.enum(["file", "directory"]).optional(),
+  sizeBytes: z.number().int().nonnegative().optional(),
+  extension: z.string().optional(),
+  textLike: z.boolean().optional(),
+  childCount: z.number().int().nonnegative().optional(),
+  errors: z.array(z.string()).optional(),
+});
+
+export const readFileOutputSchema = z.object({
+  requestedPath: z.string(),
+  resolvedPath: z.string(),
+  cwd: z.string(),
+  exists: z.boolean(),
+  startLine: z.number().int().nonnegative().optional(),
+  endLine: z.number().int().nonnegative().optional(),
+  content: z.string().optional(),
+  truncated: z.boolean(),
+  errors: z.array(z.string()).optional(),
+});
+
 export type RagAnswerInput = z.infer<typeof ragAnswerInputSchema>;
 export type RagSearchInput = z.infer<typeof ragSearchInputSchema>;
 export type RagPreparePromptInput = z.infer<typeof ragPreparePromptInputSchema>;
 export type CorpusInspectInput = z.infer<typeof corpusInspectInputSchema>;
 export type RerankOnlyInput = z.infer<typeof rerankOnlyInputSchema>;
 export type FileSystemBrowseInput = z.infer<typeof filesystemBrowseInputSchema>;
+export type FileInfoInput = z.infer<typeof fileInfoInputSchema>;
+export type ReadFileInput = z.infer<typeof readFileInputSchema>;
 export type RagAnswerOutput = z.infer<typeof ragAnswerOutputSchema>;
 export type RagSearchOutput = z.infer<typeof ragSearchOutputSchema>;
 export type RagPreparePromptOutput = z.infer<typeof ragPreparePromptOutputSchema>;
 export type CorpusInspectOutput = z.infer<typeof corpusInspectOutputSchema>;
 export type RerankOnlyOutput = z.infer<typeof rerankOnlyOutputSchema>;
 export type FileSystemBrowseOutput = z.infer<typeof filesystemBrowseOutputSchema>;
+export type FileInfoOutput = z.infer<typeof fileInfoOutputSchema>;
+export type ReadFileOutput = z.infer<typeof readFileOutputSchema>;

@@ -1,10 +1,14 @@
-import { readdir, stat } from "node:fs/promises";
+import { readFile, readdir, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type {
+  FileInfoRequest,
+  FileInfoResponse,
   FileSystemBrowseEntry,
   FileSystemBrowseRequest,
   FileSystemBrowseResponse,
+  ReadFileRequest,
+  ReadFileResponse,
 } from "../../core/src/runtimeContracts";
 
 const TEXT_FILE_EXTENSIONS = new Set([
@@ -24,6 +28,7 @@ const TEXT_FILE_EXTENSIONS = new Set([
   ".java",
   ".js",
   ".json",
+  ".jsonl",
   ".kt",
   ".log",
   ".lua",
@@ -72,11 +77,9 @@ export function expandUserPath(inputPath: string) {
   if (inputPath === "~") {
     return os.homedir();
   }
-
   if (inputPath.startsWith("~/") || inputPath.startsWith("~\\")) {
     return path.join(os.homedir(), inputPath.slice(2));
   }
-
   return inputPath;
 }
 
@@ -139,11 +142,7 @@ export async function browseFileSystem(
     }
 
     const entries: Array<FileSystemBrowseEntry> = [];
-    const state = {
-      remaining: maxEntries,
-      truncated: false,
-      errors: [] as Array<string>,
-    };
+    const state = { remaining: maxEntries, truncated: false, errors: [] as Array<string> };
     await walkBrowseEntries(resolvedPath, 0, maxDepth, recursive, includeHidden, entries, state);
 
     return {
@@ -163,6 +162,103 @@ export async function browseFileSystem(
       cwd: process.cwd(),
       exists: false,
       entries: [],
+      truncated: false,
+      errors: [error instanceof Error ? error.message : String(error)],
+    };
+  }
+}
+
+export async function fileInfo(input: FileInfoRequest): Promise<FileInfoResponse> {
+  const requestedPath = input.path;
+  const resolvedPath = resolveUserPath(input.path);
+  try {
+    const info = await stat(resolvedPath);
+    const type = info.isDirectory() ? "directory" : info.isFile() ? "file" : undefined;
+    let childCount: number | undefined;
+    if (type === "directory") {
+      try {
+        childCount = (await readdir(resolvedPath)).length;
+      } catch {
+        childCount = undefined;
+      }
+    }
+    return {
+      requestedPath,
+      resolvedPath,
+      cwd: process.cwd(),
+      exists: true,
+      type,
+      sizeBytes: type === "file" ? normalizeStatSize(info.size) : undefined,
+      extension: type === "file" ? path.extname(resolvedPath).toLowerCase() || undefined : undefined,
+      textLike: type === "file" ? isSupportedTextFile(resolvedPath) : undefined,
+      childCount,
+    };
+  } catch (error) {
+    return {
+      requestedPath,
+      resolvedPath,
+      cwd: process.cwd(),
+      exists: false,
+      errors: [error instanceof Error ? error.message : String(error)],
+    };
+  }
+}
+
+export async function readTextFileRange(input: ReadFileRequest): Promise<ReadFileResponse> {
+  const requestedPath = input.path;
+  const resolvedPath = resolveUserPath(input.path);
+  const startLine = input.startLine ?? 0;
+  const maxLines = input.maxLines ?? 200;
+  const maxChars = input.maxChars ?? 20000;
+
+  try {
+    const info = await stat(resolvedPath);
+    if (!info.isFile()) {
+      return {
+        requestedPath,
+        resolvedPath,
+        cwd: process.cwd(),
+        exists: true,
+        truncated: false,
+        errors: ["Path is not a file."],
+      };
+    }
+    if (!isSupportedTextFile(resolvedPath)) {
+      return {
+        requestedPath,
+        resolvedPath,
+        cwd: process.cwd(),
+        exists: true,
+        truncated: false,
+        errors: ["File is not a supported text-like format for bounded reading."],
+      };
+    }
+
+    const raw = await readFile(resolvedPath, "utf8");
+    const lines = raw.replace(/\r\n/g, "\n").split("\n");
+    const selected = lines.slice(startLine, startLine + maxLines);
+    let content = selected.join("\n");
+    let truncated = startLine + maxLines < lines.length;
+    if (content.length > maxChars) {
+      content = content.slice(0, maxChars);
+      truncated = true;
+    }
+    return {
+      requestedPath,
+      resolvedPath,
+      cwd: process.cwd(),
+      exists: true,
+      startLine,
+      endLine: startLine + Math.max(selected.length - 1, 0),
+      content,
+      truncated,
+    };
+  } catch (error) {
+    return {
+      requestedPath,
+      resolvedPath,
+      cwd: process.cwd(),
+      exists: false,
       truncated: false,
       errors: [error instanceof Error ? error.message : String(error)],
     };
@@ -204,11 +300,9 @@ async function walkSupportedTextFiles(
     }
     return;
   }
-
   if (!pathStat.isDirectory()) {
     return;
   }
-
   if (depth >= state.maxDepth) {
     state.truncated = true;
     return;
@@ -227,11 +321,9 @@ async function walkSupportedTextFiles(
       state.truncated = true;
       return;
     }
-
     if (!state.includeHidden && entry.name.startsWith(".")) {
       continue;
     }
-
     if (entry.isDirectory()) {
       if (state.ignoreDirectories && shouldIgnoreDirectoryName(entry.name)) {
         continue;
@@ -239,11 +331,9 @@ async function walkSupportedTextFiles(
       await walkSupportedTextFiles(path.join(resolvedPath, entry.name), depth + 1, state);
       continue;
     }
-
     if (!entry.isFile()) {
       continue;
     }
-
     const nestedPath = path.join(resolvedPath, entry.name);
     if (isSupportedTextFile(nestedPath)) {
       state.paths.push(nestedPath);
@@ -282,11 +372,9 @@ async function walkBrowseEntries(
       state.truncated = true;
       return;
     }
-
     if (!includeHidden && child.name.startsWith(".")) {
       continue;
     }
-
     const childPath = path.join(resolvedPath, child.name);
     let childStat;
     try {
@@ -297,44 +385,25 @@ async function walkBrowseEntries(
     }
     entries.push(toBrowseEntry(childPath, childStat));
     state.remaining -= 1;
-
-    if (
-      recursive &&
-      child.isDirectory() &&
-      depth + 1 < maxDepth &&
-      state.remaining > 0
-    ) {
-      await walkBrowseEntries(
-        childPath,
-        depth + 1,
-        maxDepth,
-        recursive,
-        includeHidden,
-        entries,
-        state
-      );
+    if (recursive && child.isDirectory() && depth + 1 < maxDepth && state.remaining > 0) {
+      await walkBrowseEntries(childPath, depth + 1, maxDepth, recursive, includeHidden, entries, state);
     }
   }
 }
 
-function toBrowseEntry(
-  filePath: string,
-  fileStat: Awaited<ReturnType<typeof stat>>
-): FileSystemBrowseEntry {
+function toBrowseEntry(filePath: string, fileStat: Awaited<ReturnType<typeof stat>>): FileSystemBrowseEntry {
   const type = fileStat.isDirectory() ? "directory" : "file";
   return {
     path: filePath,
     name: path.basename(filePath),
     type,
-    sizeBytes:
-      type === "file"
-        ? typeof fileStat.size === "bigint"
-          ? Number(fileStat.size)
-          : fileStat.size
-        : undefined,
-    extension:
-      type === "file" ? path.extname(filePath).toLowerCase() || undefined : undefined,
+    sizeBytes: type === "file" ? normalizeStatSize(fileStat.size) : undefined,
+    extension: type === "file" ? path.extname(filePath).toLowerCase() || undefined : undefined,
   };
+}
+
+function normalizeStatSize(size: number | bigint) {
+  return typeof size === "bigint" ? Number(size) : size;
 }
 
 function isSupportedTextFile(filePath: string) {

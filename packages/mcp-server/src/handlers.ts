@@ -13,16 +13,20 @@ import type {
 } from "../../core/src/runtimeContracts";
 import {
   corpusInspectInputSchema,
+  fileInfoInputSchema,
   filesystemBrowseInputSchema,
   ragAnswerInputSchema,
   ragPreparePromptInputSchema,
   ragSearchInputSchema,
+  readFileInputSchema,
   rerankOnlyInputSchema,
   type CorpusInspectInput,
+  type FileInfoInput,
   type FileSystemBrowseInput,
   type RagAnswerInput,
   type RagPreparePromptInput,
   type RagSearchInput,
+  type ReadFileInput,
   type RerankOnlyInput,
 } from "./contracts";
 
@@ -140,6 +144,16 @@ export function createMcpToolHandlers(runtime: RagMcpRuntime): RagToolHandlerSet
     async filesystemBrowse(input: FileSystemBrowseInput) {
       const parsed = filesystemBrowseInputSchema.parse(input);
       return runtime.browser.browse(parsed);
+    },
+
+    async fileInfo(input: FileInfoInput) {
+      const parsed = fileInfoInputSchema.parse(input);
+      return runtime.browser.fileInfo(parsed);
+    },
+
+    async readFile(input: ReadFileInput) {
+      const parsed = readFileInputSchema.parse(input);
+      return runtime.browser.readFile(parsed);
     },
   };
 }

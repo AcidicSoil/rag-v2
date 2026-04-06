@@ -6,6 +6,8 @@ import type { RagMcpRuntime } from "../../core/src/runtimeContracts";
 import {
   browseFileSystem,
   discoverSupportedTextFiles,
+  fileInfo,
+  readTextFileRange,
   resolveUserPath,
 } from "./pathResolution";
 
@@ -104,6 +106,12 @@ export function createDefaultMcpRuntime(): RagMcpRuntime {
     browser: {
       async browse(input) {
         return browseFileSystem(input);
+      },
+      async fileInfo(input) {
+        return fileInfo(input);
+      },
+      async readFile(input) {
+        return readTextFileRange(input);
       },
     },
   };

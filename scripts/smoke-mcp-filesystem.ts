@@ -68,6 +68,26 @@ async function main() {
       "Expected filesystem_browse to include node_modules when browsing."
     );
 
+    const info = await handlers.fileInfo({
+      path: path.join(tempRoot, "architecture.md"),
+    });
+    assert(info.exists, "Expected file_info to resolve the architecture file.");
+    assert(info.type === "file", "Expected file_info to report a file.");
+    assert(info.extension === ".md", "Expected file_info to report the markdown extension.");
+    assert(info.textLike === true, "Expected file_info to mark architecture.md as text-like.");
+
+    const excerpt = await handlers.readFile({
+      path: path.join(tempRoot, "architecture.md"),
+      startLine: 0,
+      maxLines: 2,
+      maxChars: 200,
+    });
+    assert(excerpt.exists, "Expected read_file to resolve the architecture file.");
+    assert(
+      excerpt.content?.includes("session service uses PostgreSQL"),
+      "Expected read_file to return the requested text excerpt."
+    );
+
     const inspect = await handlers.corpusInspect({
       paths: [tempRoot],
     });

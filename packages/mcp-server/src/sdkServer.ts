@@ -227,6 +227,55 @@ export function createOfficialMcpServer(handlers: RagToolHandlerSet) {
   );
 
   registerTool(
+    "file_info",
+    {
+      description:
+        "Get metadata about a filesystem path without ingesting it as a RAG corpus.",
+      inputSchema: {
+        path: z.string().min(1).describe("Filesystem path to inspect"),
+      } as any,
+    },
+    async (args: any) => {
+      const result = await handlers.fileInfo(args);
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(result, null, 2),
+          },
+        ],
+        structuredContent: result,
+      };
+    }
+  );
+
+  registerTool(
+    "read_file",
+    {
+      description:
+        "Read a bounded text excerpt from a file without ingesting it as a RAG corpus.",
+      inputSchema: {
+        path: z.string().min(1).describe("Filesystem path to a text-like file"),
+        startLine: z.number().int().min(0).optional().describe("0-based starting line"),
+        maxLines: z.number().int().min(1).max(2000).optional().describe("Maximum lines to read"),
+        maxChars: z.number().int().min(1).max(200000).optional().describe("Maximum characters to return"),
+      } as any,
+    },
+    async (args: any) => {
+      const result = await handlers.readFile(args);
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(result, null, 2),
+          },
+        ],
+        structuredContent: result,
+      };
+    }
+  );
+
+  registerTool(
     "corpus_inspect",
     {
       description:
