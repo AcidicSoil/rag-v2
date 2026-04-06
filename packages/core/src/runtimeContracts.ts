@@ -88,6 +88,11 @@ export interface FileSystemBrowseEntry {
   extension?: string;
 }
 
+export interface FileExtensionCount {
+  extension: string;
+  count: number;
+}
+
 export interface RagAnswerEvidence {
   label: string;
   fileName: string;
@@ -138,6 +143,9 @@ export interface FileSystemBrowseResponse {
   type?: "file" | "directory";
   entries: Array<FileSystemBrowseEntry>;
   truncated: boolean;
+  directoryCount?: number;
+  fileCount?: number;
+  topExtensions?: Array<FileExtensionCount>;
   errors?: Array<string>;
 }
 
@@ -155,6 +163,9 @@ export interface FileInfoResponse {
   extension?: string;
   textLike?: boolean;
   childCount?: number;
+  directoryCount?: number;
+  fileCount?: number;
+  topExtensions?: Array<FileExtensionCount>;
   errors?: Array<string>;
 }
 

@@ -2,6 +2,7 @@ import { readFile, readdir, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type {
+  FileExtensionCount,
   FileInfoRequest,
   FileInfoResponse,
   FileSystemBrowseEntry,
@@ -141,6 +142,12 @@ export async function browseFileSystem(
       };
     }
 
+    const immediateEntries = await readdir(resolvedPath, { withFileTypes: true });
+    const visibleEntries = immediateEntries.filter(
+      (entry) => includeHidden || !entry.name.startsWith(".")
+    );
+    const summary = summarizeDirEntries(visibleEntries);
+
     const entries: Array<FileSystemBrowseEntry> = [];
     const state = { remaining: maxEntries, truncated: false, errors: [] as Array<string> };
     await walkBrowseEntries(resolvedPath, 0, maxDepth, recursive, includeHidden, entries, state);
@@ -153,6 +160,9 @@ export async function browseFileSystem(
       type: "directory",
       entries,
       truncated: state.truncated,
+      directoryCount: summary.directoryCount,
+      fileCount: summary.fileCount,
+      topExtensions: summary.topExtensions,
       errors: state.errors.length > 0 ? state.errors : undefined,
     };
   } catch (error) {
@@ -175,9 +185,18 @@ export async function fileInfo(input: FileInfoRequest): Promise<FileInfoResponse
     const info = await stat(resolvedPath);
     const type = info.isDirectory() ? "directory" : info.isFile() ? "file" : undefined;
     let childCount: number | undefined;
+    let directoryCount: number | undefined;
+    let fileCount: number | undefined;
+    let topExtensions: Array<FileExtensionCount> | undefined;
     if (type === "directory") {
       try {
-        childCount = (await readdir(resolvedPath)).length;
+        const children = await readdir(resolvedPath, { withFileTypes: true });
+        const visibleChildren = children.filter((entry) => !entry.name.startsWith("."));
+        childCount = visibleChildren.length;
+        const summary = summarizeDirEntries(visibleChildren);
+        directoryCount = summary.directoryCount;
+        fileCount = summary.fileCount;
+        topExtensions = summary.topExtensions;
       } catch {
         childCount = undefined;
       }
@@ -192,6 +211,9 @@ export async function fileInfo(input: FileInfoRequest): Promise<FileInfoResponse
       extension: type === "file" ? path.extname(resolvedPath).toLowerCase() || undefined : undefined,
       textLike: type === "file" ? isSupportedTextFile(resolvedPath) : undefined,
       childCount,
+      directoryCount,
+      fileCount,
+      topExtensions,
     };
   } catch (error) {
     return {
@@ -399,6 +421,35 @@ function toBrowseEntry(filePath: string, fileStat: Awaited<ReturnType<typeof sta
     type,
     sizeBytes: type === "file" ? normalizeStatSize(fileStat.size) : undefined,
     extension: type === "file" ? path.extname(filePath).toLowerCase() || undefined : undefined,
+  };
+}
+
+function summarizeDirEntries(entries: Array<{ name: string; isDirectory(): boolean; isFile(): boolean }>) {
+  const extensionCounts = new Map<string, number>();
+  let directoryCount = 0;
+  let fileCount = 0;
+
+  for (const entry of entries) {
+    if (entry.isDirectory()) {
+      directoryCount += 1;
+      continue;
+    }
+    if (entry.isFile()) {
+      fileCount += 1;
+      const ext = path.extname(entry.name).toLowerCase() || "<noext>";
+      extensionCounts.set(ext, (extensionCounts.get(ext) ?? 0) + 1);
+    }
+  }
+
+  const topExtensions: Array<FileExtensionCount> = [...extensionCounts.entries()]
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+    .slice(0, 8)
+    .map(([extension, count]) => ({ extension, count }));
+
+  return {
+    directoryCount,
+    fileCount,
+    topExtensions,
   };
 }
 

@@ -67,6 +67,12 @@ async function main() {
       browse.entries.some((entry) => entry.name === "node_modules" && entry.type === "directory"),
       "Expected filesystem_browse to include node_modules when browsing."
     );
+    assert(browse.directoryCount === 2, "Expected filesystem_browse to summarize two visible directories.");
+    assert(browse.fileCount === 1, "Expected filesystem_browse to summarize one visible file at the root.");
+    assert(
+      browse.topExtensions?.some((entry) => entry.extension === ".md" && entry.count === 1),
+      "Expected filesystem_browse to summarize the markdown extension count."
+    );
 
     const info = await handlers.fileInfo({
       path: path.join(tempRoot, "architecture.md"),
@@ -75,6 +81,15 @@ async function main() {
     assert(info.type === "file", "Expected file_info to report a file.");
     assert(info.extension === ".md", "Expected file_info to report the markdown extension.");
     assert(info.textLike === true, "Expected file_info to mark architecture.md as text-like.");
+
+    const dirInfo = await handlers.fileInfo({
+      path: tempRoot,
+    });
+    assert(dirInfo.exists, "Expected file_info to resolve the temporary root directory.");
+    assert(dirInfo.type === "directory", "Expected file_info to report a directory.");
+    assert(dirInfo.childCount === 3, "Expected file_info to report three visible children at the root.");
+    assert(dirInfo.directoryCount === 2, "Expected file_info to report two visible directories.");
+    assert(dirInfo.fileCount === 1, "Expected file_info to report one visible file.");
 
     const excerpt = await handlers.readFile({
       path: path.join(tempRoot, "architecture.md"),

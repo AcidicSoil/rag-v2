@@ -253,6 +253,11 @@ export const filesystemBrowseEntrySchema = z.object({
   extension: z.string().optional(),
 });
 
+export const fileExtensionCountSchema = z.object({
+  extension: z.string(),
+  count: z.number().int().nonnegative(),
+});
+
 export const filesystemBrowseOutputSchema = z.object({
   requestedPath: z.string(),
   resolvedPath: z.string(),
@@ -261,6 +266,9 @@ export const filesystemBrowseOutputSchema = z.object({
   type: z.enum(["file", "directory"]).optional(),
   entries: z.array(filesystemBrowseEntrySchema),
   truncated: z.boolean(),
+  directoryCount: z.number().int().nonnegative().optional(),
+  fileCount: z.number().int().nonnegative().optional(),
+  topExtensions: z.array(fileExtensionCountSchema).optional(),
   errors: z.array(z.string()).optional(),
 });
 
@@ -274,6 +282,9 @@ export const fileInfoOutputSchema = z.object({
   extension: z.string().optional(),
   textLike: z.boolean().optional(),
   childCount: z.number().int().nonnegative().optional(),
+  directoryCount: z.number().int().nonnegative().optional(),
+  fileCount: z.number().int().nonnegative().optional(),
+  topExtensions: z.array(fileExtensionCountSchema).optional(),
   errors: z.array(z.string()).optional(),
 });
 
