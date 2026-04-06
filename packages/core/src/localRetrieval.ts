@@ -302,7 +302,14 @@ function buildStructuredQueryPlan(query: string): StructuredQueryPlan {
     };
   }
 
-  const patterns = [
+  const constraints: Array<StructuredQueryConstraint> = [];
+  const remainingSpans: Array<{ start: number; end: number }> = [];
+
+  const explicitFieldMatches = extractExplicitStructuredFieldMatches(normalizedQuery);
+  constraints.push(...explicitFieldMatches.constraints);
+  remainingSpans.push(...explicitFieldMatches.spans);
+
+  const naturalLanguagePatterns = [
     {
       label: "conversation_id",
       aliases: [...STRUCTURED_FIELD_ALIASES.conversationId, ...STRUCTURED_FIELD_ALIASES.sessionId],
@@ -312,9 +319,16 @@ function buildStructuredQueryPlan(query: string): StructuredQueryPlan {
     },
     {
       label: "message_id",
-      aliases: [...STRUCTURED_FIELD_ALIASES.messageId, ...STRUCTURED_FIELD_ALIASES.id],
+      aliases: STRUCTURED_FIELD_ALIASES.messageId,
       strategy: "exact" as const,
-      regex: /\b(?:message(?:\s+id)?|message_id|messageId|record(?:\s+id)?|id)\s*(?:=|:|#)?\s*["']?([A-Za-z0-9][A-Za-z0-9._:/+-]{1,})["']?/gi,
+      regex: /\b(?:message(?:\s+id)?|message_id|messageId|record(?:\s+id)?)\s*(?:=|:|#)?\s*["']?([A-Za-z0-9][A-Za-z0-9._:/+-]{1,})["']?/gi,
+      accept: looksStructuredIdentifier,
+    },
+    {
+      label: "id",
+      aliases: STRUCTURED_FIELD_ALIASES.id,
+      strategy: "exact" as const,
+      regex: /\b(?:exact\s+)?id\s*(?:=|:|#)?\s*["']?([A-Za-z0-9][A-Za-z0-9._:/+-]{1,})["']?/gi,
       accept: looksStructuredIdentifier,
     },
     {
@@ -347,9 +361,7 @@ function buildStructuredQueryPlan(query: string): StructuredQueryPlan {
     },
   ];
 
-  const constraints: Array<StructuredQueryConstraint> = [];
-  const remainingSpans: Array<{ start: number; end: number }> = [];
-  for (const pattern of patterns) {
+  for (const pattern of naturalLanguagePatterns) {
     for (const match of normalizedQuery.matchAll(pattern.regex)) {
       const value = match[1]?.trim();
       if (!value || !pattern.accept(value)) {
@@ -377,6 +389,103 @@ function buildStructuredQueryPlan(query: string): StructuredQueryPlan {
     constraints: deduped,
     fallbackQuery,
   };
+}
+
+function extractExplicitStructuredFieldMatches(query: string): {
+  constraints: Array<StructuredQueryConstraint>;
+  spans: Array<{ start: number; end: number }>;
+} {
+  const aliasMap = buildStructuredAliasMap();
+  const constraints: Array<StructuredQueryConstraint> = [];
+  const spans: Array<{ start: number; end: number }> = [];
+  const explicitPattern = /\b([A-Za-z_][A-Za-z0-9_]*)\s*(?:=|:)\s*("([^"]+)"|'([^']+)'|([^\s,;]+))/g;
+
+  for (const match of query.matchAll(explicitPattern)) {
+    const rawField = match[1]?.trim();
+    const rawValue = match[3] ?? match[4] ?? match[5] ?? "";
+    if (!rawField || !rawValue.trim()) {
+      continue;
+    }
+
+    const normalizedField = rawField.toLowerCase();
+    const resolved = aliasMap.get(normalizedField);
+    if (!resolved) {
+      continue;
+    }
+
+    const value = rawValue.trim();
+    if (!acceptStructuredConstraintValue(resolved.label, value)) {
+      continue;
+    }
+
+    constraints.push({
+      label: resolved.label,
+      aliases: resolved.aliases,
+      value,
+      normalizedValue: normalizeStructuredValue(value),
+      strategy: resolved.strategy,
+    });
+    if (typeof match.index === "number") {
+      spans.push({
+        start: match.index,
+        end: match.index + match[0].length,
+      });
+    }
+  }
+
+  return {
+    constraints,
+    spans,
+  };
+}
+
+function buildStructuredAliasMap(): Map<
+  string,
+  { label: string; aliases: ReadonlyArray<string>; strategy: "exact" | "prefix" }
+> {
+  const map = new Map<
+    string,
+    { label: string; aliases: ReadonlyArray<string>; strategy: "exact" | "prefix" }
+  >();
+  const register = (
+    aliases: ReadonlyArray<string>,
+    label: string,
+    strategy: "exact" | "prefix"
+  ) => {
+    for (const alias of aliases) {
+      map.set(alias.toLowerCase(), {
+        label,
+        aliases,
+        strategy,
+      });
+    }
+  };
+
+  register([...STRUCTURED_FIELD_ALIASES.conversationId, ...STRUCTURED_FIELD_ALIASES.sessionId], "conversation_id", "exact");
+  register(STRUCTURED_FIELD_ALIASES.messageId, "message_id", "exact");
+  register(STRUCTURED_FIELD_ALIASES.id, "id", "exact");
+  register(STRUCTURED_FIELD_ALIASES.timestamp, "timestamp", "prefix");
+  register(STRUCTURED_FIELD_ALIASES.role, "role", "exact");
+  register(STRUCTURED_FIELD_ALIASES.topic, "topic", "exact");
+  register(STRUCTURED_FIELD_ALIASES.userId, "user_id", "exact");
+
+  return map;
+}
+
+function acceptStructuredConstraintValue(label: string, value: string): boolean {
+  if (!value.trim()) {
+    return false;
+  }
+  if (label === "timestamp") {
+    return value.trim().length >= 10;
+  }
+  if (label === "role") {
+    return /^(user|assistant|system|tool|developer)$/i.test(value.trim());
+  }
+  if (label === "topic") {
+    return value.trim().length >= 2;
+  }
+  return looksStructuredIdentifier(value) || value.trim().length >= 2;
 }
 
 function matchesConstraint(
@@ -821,14 +930,33 @@ function mergeCandidates(
   maxCandidates: number
 ): Array<RagCandidate> {
   const merged: Array<RagCandidate> = [];
-  const seen = new Set<string>();
+  const seen = new Map<string, number>();
   for (const candidate of [...preferred, ...fallback]) {
     const key = `${candidate.sourceId}:${String(candidate.metadata?.recordIndex ?? "")}:${candidate.content}`;
-    if (seen.has(key)) {
-      continue;
+    const existingIndex = seen.get(key);
+    if (existingIndex === undefined) {
+      seen.set(key, merged.length);
+      merged.push(candidate);
+    } else {
+      merged[existingIndex] = {
+        ...(merged[existingIndex]!.score >= candidate.score ? merged[existingIndex]! : candidate),
+        score: Math.max(merged[existingIndex]!.score, candidate.score),
+        metadata: {
+          ...(candidate.metadata ?? {}),
+          ...(merged[existingIndex]!.metadata ?? {}),
+          structuredQueryMatches: [
+            ...new Set([
+              ...((Array.isArray(merged[existingIndex]!.metadata?.structuredQueryMatches)
+                ? merged[existingIndex]!.metadata?.structuredQueryMatches
+                : []) as Array<string>),
+              ...((Array.isArray(candidate.metadata?.structuredQueryMatches)
+                ? candidate.metadata?.structuredQueryMatches
+                : []) as Array<string>),
+            ]),
+          ],
+        },
+      };
     }
-    seen.add(key);
-    merged.push(candidate);
     if (merged.length >= maxCandidates) {
       break;
     }

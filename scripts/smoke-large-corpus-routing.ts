@@ -190,6 +190,28 @@ async function main() {
       "Expected exact structured query to surface the targeted JSONL record."
     );
 
+    const explicitStructuredResult = await orchestrateRagRequest(
+      {
+        query:
+          'Find conversation_id:"conv-999" topic:"routing" timestamp:"2025-02-03" hierarchy marker.',
+        paths: [jsonlPath],
+        outputMode: "search-results",
+      },
+      runtime
+    );
+
+    assert(
+      explicitStructuredResult.candidates[0]?.metadata?.retrievalMode === "structured-query-first",
+      "Expected explicit field:value query to use structured-query-first retrieval."
+    );
+    assert(
+      Array.isArray(explicitStructuredResult.candidates[0]?.metadata?.structuredQueryMatches) &&
+        explicitStructuredResult.candidates[0]!.metadata!.structuredQueryMatches.includes("conversation_id=conv-999") &&
+        explicitStructuredResult.candidates[0]!.metadata!.structuredQueryMatches.includes("timestamp=2025-02-03") &&
+        explicitStructuredResult.candidates[0]!.metadata!.structuredQueryMatches.includes("topic=routing"),
+      "Expected explicit field:value query to preserve multiple structured matches through fusion and dedupe."
+    );
+
     const cachedLocalResult = await orchestrateRagRequest(
       {
         query:

@@ -71,9 +71,7 @@ export function fuseRagCandidates(
 
       existing.bestScore = Math.max(existing.bestScore, candidate.score);
       existing.fusedScore += reciprocalRankScore;
-      if (candidate.score > existing.candidate.score) {
-        existing.candidate = candidate;
-      }
+      existing.candidate = mergeRagCandidatePair(existing.candidate, candidate);
     });
   });
 
@@ -123,10 +121,13 @@ export function mergeHybridRagCandidates(
       continue;
     }
 
-    merged.set(key, {
-      ...existing,
-      score: existing.score + lexicalWeightedScore,
-    });
+    merged.set(
+      key,
+      mergeRagCandidatePair(existing, {
+        ...entry,
+        score: existing.score + lexicalWeightedScore,
+      })
+    );
   }
 
   return Array.from(merged.values())
@@ -197,13 +198,15 @@ export function dedupeRagCandidates(
   const deduped: Array<RagCandidate> = [];
 
   for (const entry of entries) {
-    const isNearDuplicate = deduped.some((existing) => {
+    const duplicateIndex = deduped.findIndex((existing) => {
       const sameFile = existing.sourceId === entry.sourceId;
       return sameFile && computeSimilarity(existing.content, entry.content) >= threshold;
     });
 
-    if (!isNearDuplicate) {
+    if (duplicateIndex === -1) {
       deduped.push(entry);
+    } else {
+      deduped[duplicateIndex] = mergeRagCandidatePair(deduped[duplicateIndex]!, entry);
     }
 
     if (deduped.length >= maxEvidenceBlocks) {
@@ -290,6 +293,105 @@ function applyDiversityPenalty(
       diversityPenalty,
     },
   };
+}
+
+function mergeRagCandidatePair(left: RagCandidate, right: RagCandidate): RagCandidate {
+  const preferred = right.score > left.score ? right : left;
+  const secondary = preferred === left ? right : left;
+
+  return {
+    ...preferred,
+    score: Math.max(left.score, right.score),
+    metadata: mergeCandidateMetadata(preferred.metadata, secondary.metadata),
+  };
+}
+
+function mergeCandidateMetadata(
+  primary?: Record<string, unknown>,
+  secondary?: Record<string, unknown>
+): Record<string, unknown> | undefined {
+  if (!primary && !secondary) {
+    return undefined;
+  }
+
+  const merged: Record<string, unknown> = {
+    ...(secondary ?? {}),
+    ...(primary ?? {}),
+  };
+
+  const structuredFields = mergeUniqueStrings(
+    asStringArray(primary?.structuredFields),
+    asStringArray(secondary?.structuredFields)
+  );
+  if (structuredFields.length > 0) {
+    merged.structuredFields = structuredFields;
+  }
+
+  const structuredQueryMatches = mergeUniqueStrings(
+    asStringArray(primary?.structuredQueryMatches),
+    asStringArray(secondary?.structuredQueryMatches)
+  );
+  if (structuredQueryMatches.length > 0) {
+    merged.structuredQueryMatches = structuredQueryMatches;
+  }
+
+  const structuredRecord = mergeStringRecords(
+    asStringRecord(primary?.structuredRecord),
+    asStringRecord(secondary?.structuredRecord)
+  );
+  if (structuredRecord) {
+    merged.structuredRecord = structuredRecord;
+  }
+
+  const parentSummary = mergeUniqueStrings(
+    typeof primary?.parentSummary === "string" ? [primary.parentSummary] : [],
+    typeof secondary?.parentSummary === "string" ? [secondary.parentSummary] : []
+  );
+  if (parentSummary.length > 0) {
+    merged.parentSummary = parentSummary.join("\n\n");
+  }
+
+  return merged;
+}
+
+function asStringArray(value: unknown): Array<string> {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.filter((entry): entry is string => typeof entry === "string");
+}
+
+function asStringRecord(value: unknown): Record<string, string> | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  const entries = Object.entries(value).filter(
+    ([, entryValue]) => typeof entryValue === "string"
+  ) as Array<[string, string]>;
+  if (entries.length === 0) {
+    return undefined;
+  }
+  return Object.fromEntries(entries);
+}
+
+function mergeStringRecords(
+  primary?: Record<string, string>,
+  secondary?: Record<string, string>
+): Record<string, string> | undefined {
+  if (!primary && !secondary) {
+    return undefined;
+  }
+  return {
+    ...(secondary ?? {}),
+    ...(primary ?? {}),
+  };
+}
+
+function mergeUniqueStrings(
+  primary: Array<string>,
+  secondary: Array<string>
+): Array<string> {
+  return [...new Set([...primary, ...secondary].map((entry) => entry.trim()).filter(Boolean))];
 }
 
 function buildCandidateKey(candidate: RagCandidate): string {
