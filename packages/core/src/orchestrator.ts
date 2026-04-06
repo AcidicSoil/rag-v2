@@ -351,19 +351,6 @@ async function shapeLargeCorpusSummaryOutput(
     );
   }
 
-  const summaryCorpus: RagLoadedCorpus = {
-    ...corpus,
-    documents: selectedSummaryDocuments,
-    estimatedTokens: selectedSummaryDocuments.reduce(
-      (sum, document) => sum + Math.ceil(document.content.length / 4),
-      0
-    ),
-  };
-  const preparedPrompt = buildFullContextPrompt(
-    query,
-    summaryCorpus,
-    options.policy?.groundingMode ?? "warn-on-weak-evidence"
-  );
   const summaryCandidates = lexicalRetrieveFromDocuments(
     query,
     selectedSummaryDocuments,
@@ -379,7 +366,35 @@ async function shapeLargeCorpusSummaryOutput(
           score: Math.max(0.1, 1 - index * 0.05),
           metadata: document.metadata,
         }));
-  const summaryEvidence = buildRagEvidenceBlocks(fallbackSummaryCandidates);
+  const overviewSynthesis = buildStructuredOverviewSynthesis(
+    query,
+    selectedSummaryDocuments,
+    fallbackSummaryCandidates
+  );
+  const promptSummaryDocuments = overviewSynthesis.document
+    ? [overviewSynthesis.document, ...selectedSummaryDocuments]
+    : selectedSummaryDocuments;
+  const finalSummaryCandidates = overviewSynthesis.candidate
+    ? [overviewSynthesis.candidate, ...fallbackSummaryCandidates]
+    : fallbackSummaryCandidates;
+  if (overviewSynthesis.candidate) {
+    diagnostics.notes?.push("Built synthesized structured overview summary from selected summary documents.");
+  }
+
+  const summaryCorpus: RagLoadedCorpus = {
+    ...corpus,
+    documents: promptSummaryDocuments,
+    estimatedTokens: promptSummaryDocuments.reduce(
+      (sum, document) => sum + Math.ceil(document.content.length / 4),
+      0
+    ),
+  };
+  const preparedPrompt = buildFullContextPrompt(
+    query,
+    summaryCorpus,
+    options.policy?.groundingMode ?? "warn-on-weak-evidence"
+  );
+  const summaryEvidence = buildRagEvidenceBlocks(finalSummaryCandidates);
 
   if (options.outputMode === "prepared-prompt") {
     return {
@@ -396,14 +411,14 @@ async function shapeLargeCorpusSummaryOutput(
     return {
       mode: "search-results",
       route,
-      candidates: fallbackSummaryCandidates,
+      candidates: finalSummaryCandidates,
       evidence: summaryEvidence,
       diagnostics,
       unsupportedClaimWarnings,
     };
   }
 
-  const answer = [
+  const answer = overviewSynthesis.candidate?.content ?? [
     `Large-corpus ${route} mode selected for: ${query}`,
     corpus.analysis?.notes.join(" ") ?? "",
     ...selectedSummaryDocuments
@@ -421,7 +436,7 @@ async function shapeLargeCorpusSummaryOutput(
     evidence: summaryEvidence,
     diagnostics,
     unsupportedClaimWarnings,
-    confidence: selectedSummaryDocuments.length > 0 ? 0.55 : 0.2,
+    confidence: promptSummaryDocuments.length > 0 ? 0.6 : 0.2,
     groundingMode: options.policy?.groundingMode,
   };
 }
@@ -775,6 +790,136 @@ function buildPreparedPrompt(
       )
       .join("\n\n"),
   ].join("\n\n");
+}
+
+function buildStructuredOverviewSynthesis(
+  query: string,
+  selectedSummaryDocuments: RagLoadedCorpus["documents"],
+  rankedCandidates: Array<RagCandidate>
+): {
+  document?: RagLoadedCorpus["documents"][number];
+  candidate?: RagCandidate;
+} {
+  const sourceTypePriority = [
+    "structured-topic-summary",
+    "structured-time-summary",
+    "structured-entity-summary",
+    "structured-file-summary",
+    "file-synopsis",
+    "directory-manifest",
+  ];
+  const selectedByType = new Map<string, RagLoadedCorpus["documents"][number]>();
+
+  for (const sourceType of sourceTypePriority) {
+    const matchingCandidate = rankedCandidates.find(
+      (candidate) => candidate.metadata?.sourceType === sourceType
+    );
+    const matchingDocument =
+      (matchingCandidate
+        ? selectedSummaryDocuments.find((document) => document.id === matchingCandidate.sourceId)
+        : undefined) ??
+      selectedSummaryDocuments.find((document) => document.metadata?.sourceType === sourceType);
+    if (matchingDocument) {
+      selectedByType.set(sourceType, matchingDocument);
+    }
+  }
+
+  if (selectedByType.size < 2) {
+    return {};
+  }
+
+  const synthesisLines = [
+    `Structured overview synthesis for query: ${query}`,
+  ];
+  const supportingIds: Array<string> = [];
+  const supportingNames: Array<string> = [];
+
+  const overviewDocument = selectedByType.get("structured-file-summary") ?? selectedByType.get("file-synopsis");
+  if (overviewDocument) {
+    supportingIds.push(overviewDocument.id);
+    supportingNames.push(overviewDocument.name);
+    const overviewLines = extractSummaryHighlights(overviewDocument, 2);
+    if (overviewLines.length > 0) {
+      synthesisLines.push(`Overview: ${overviewLines.join(" ")}`);
+    }
+  }
+
+  const topicDocument = selectedByType.get("structured-topic-summary");
+  if (topicDocument) {
+    supportingIds.push(topicDocument.id);
+    supportingNames.push(topicDocument.name);
+    const topicLines = extractSummaryHighlights(topicDocument, 2);
+    if (topicLines.length > 0) {
+      synthesisLines.push(`Topics: ${topicLines.join(" ")}`);
+    }
+  }
+
+  const timeDocument = selectedByType.get("structured-time-summary");
+  if (timeDocument) {
+    supportingIds.push(timeDocument.id);
+    supportingNames.push(timeDocument.name);
+    const timeLines = extractSummaryHighlights(timeDocument, 2);
+    if (timeLines.length > 0) {
+      synthesisLines.push(`Time: ${timeLines.join(" ")}`);
+    }
+  }
+
+  const entityDocument = selectedByType.get("structured-entity-summary");
+  if (entityDocument) {
+    supportingIds.push(entityDocument.id);
+    supportingNames.push(entityDocument.name);
+    const entityLines = extractSummaryHighlights(entityDocument, 3);
+    if (entityLines.length > 0) {
+      synthesisLines.push(`Entities: ${entityLines.join(" ")}`);
+    }
+  }
+
+  const supportingSummaryNames = [...new Set(supportingNames)];
+  if (supportingSummaryNames.length > 0) {
+    synthesisLines.push(`Supporting summaries: ${supportingSummaryNames.join(", ")}`);
+  }
+
+  const content = synthesisLines.join("\n");
+  const id = `structured-overview-synthesis:${selectedSummaryDocuments[0]?.metadata?.path ?? "summary"}`;
+  const document = {
+    id,
+    name: `structured-overview-synthesis:${selectedSummaryDocuments[0]?.metadata?.path ?? "summary"}`,
+    content,
+    metadata: {
+      sourceType: "structured-overview-synthesis",
+      supportingSummaryIds: [...new Set(supportingIds)],
+      supportingSummaryNames,
+    },
+  };
+
+  return {
+    document,
+    candidate: {
+      sourceId: document.id,
+      sourceName: document.name,
+      content: document.content,
+      score: Math.min(1, Math.max(0.45, rankedCandidates[0]?.score ?? 0.45)),
+      metadata: document.metadata,
+    },
+  };
+}
+
+function extractSummaryHighlights(
+  document: RagLoadedCorpus["documents"][number],
+  maxLines: number
+): Array<string> {
+  return document.content
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(
+      (line) =>
+        line.length > 0 &&
+        !/^Structured (file|topic|time|entity) summary for:/i.test(line) &&
+        !/^Structured file:/i.test(line) &&
+        !/^Format:/i.test(line) &&
+        !/^Based on sampled JSONL windows/i.test(line)
+    )
+    .slice(0, maxLines);
 }
 
 function selectSummaryDocumentsForQuery(
