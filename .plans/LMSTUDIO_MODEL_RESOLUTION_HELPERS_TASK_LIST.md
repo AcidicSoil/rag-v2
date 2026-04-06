@@ -10,6 +10,7 @@
 - `packages/mcp-server/src/lmstudioRuntime.ts`
 - existing smoke scripts touching rerank and MCP handler behavior
 - `scripts/smoke-lmstudio-model-resolution.ts`
+- `scripts/smoke-model-rerank.ts`
 
 ## Problem statement
 Both the adapter and the MCP LM Studio runtime now support embedding and rerank model resolution, but the selection logic is duplicated.
@@ -59,6 +60,13 @@ Current duplication:
    - Update adapter and MCP imports to use the neutral shared package path.
    - Remove the old adapter-local helper file so MCP no longer imports adapter internals.
 
+8. **Move remaining LM Studio-only shared utilities out of adapter internals**
+   - Move rerank types into `packages/lmstudio-shared/`.
+   - Move model-assisted rerank helpers into `packages/lmstudio-shared/`.
+   - Move shared LM Studio/core conversion helpers into `packages/lmstudio-shared/`.
+   - Leave only the adapter-specific `toEvidenceBlocks()` wrapper in adapter-local code.
+   - Remove the old adapter-local rerank/model helper files once imports are updated.
+
 ## Current implementation focus
 - [x] Step 1: add shared helper module.
 - [x] Step 2: migrate adapter runtime.
@@ -67,11 +75,13 @@ Current duplication:
 - [x] Step 5: validate with typechecks and smoke tests.
 - [x] Step 6: add focused helper-branch smoke coverage.
 - [x] Step 7: move helper to a neutral LM Studio shared package.
+- [x] Step 8: move remaining LM Studio-only shared utilities out of adapter internals.
 
 ## Validation completed
 - `npm run typecheck:adapter`
 - `npm run typecheck:mcp`
 - `npm run typecheck:lmstudio-shared`
+- `npm run smoke:model-rerank`
 - `npm run smoke:mcp`
 - `npm run smoke:lmstudio-model-resolution`
 
@@ -81,6 +91,6 @@ Current duplication:
 - Refactoring non-LM-Studio runtimes.
 
 ## Remaining follow-up options
-- Consider whether `lmstudioCoreBridge`, `modelRerank`, and related LM Studio-only helpers should also move out of adapter internals if MCP reuse grows further.
+- Consider whether adapter-local evidence shaping/types should also move into `packages/lmstudio-shared/` if they become cross-runtime concerns.
 - Decide whether embedding/rerank helper APIs should converge behind a more generic model-resolution abstraction.
 - Add runtime-level assertions for note text if stronger end-to-end fallback diagnostics coverage is desired beyond helper-level error-contract validation.

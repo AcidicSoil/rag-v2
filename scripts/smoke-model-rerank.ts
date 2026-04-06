@@ -3,7 +3,7 @@ import {
   applyModelRerankScores,
   buildModelRerankPrompt,
   parseModelRerankResponse,
-} from "../packages/adapter-lmstudio/src/modelRerank";
+} from "../packages/lmstudio-shared/src/modelRerank";
 import { rerankRetrievalEntries } from "../packages/adapter-lmstudio/src/rerank";
 
 function assert(condition: unknown, message: string): asserts condition {

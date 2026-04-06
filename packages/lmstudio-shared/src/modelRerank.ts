@@ -1,6 +1,9 @@
-import type { LLMDynamicHandle, RetrievalResultEntry } from "@lmstudio/sdk";
-import { containsInstructionLikeText, sanitizeRetrievedText } from "./safety";
-import type { ModelRerankScore, RankedRetrievalEntry } from "./types/rerank";
+import type { LLMDynamicHandle } from "@lmstudio/sdk";
+import {
+  containsCoreInstructionLikeText,
+  sanitizeCoreRetrievedText,
+} from "../../core/src/safety";
+import type { ModelRerankScore, RankedRetrievalEntry } from "./rerankTypes";
 
 const MODEL_RERANK_SCORE_WEIGHT = 0.8;
 const HEURISTIC_SCORE_WEIGHT = 0.2;
@@ -12,7 +15,7 @@ export function buildModelRerankPrompt(
 ): string {
   const candidates = entries
     .map((entry, index) => {
-      const sanitizedContent = sanitizeRetrievedText(entry.entry.content, {
+      const sanitizedContent = sanitizeCoreRetrievedText(entry.entry.content, {
         sanitizeRetrievedText: true,
         stripInstructionalSpans: true,
       });
@@ -98,7 +101,7 @@ export function applyModelRerankScores(
         return entry;
       }
 
-      const effectiveModelScore = containsInstructionLikeText(entry.entry.content)
+      const effectiveModelScore = containsCoreInstructionLikeText(entry.entry.content)
         ? Math.min(modelScore, INSTRUCTION_LIKE_MODEL_SCORE_CAP)
         : modelScore;
       const blendedScore =

@@ -18,9 +18,12 @@ import { lexicalRetrieve } from "./lexicalRetrieve";
 import {
   toRagCandidates,
   toRetrievalResultEntries,
-} from "./lmstudioCoreBridge";
-import { performModelAssistedRerank } from "./modelRerank";
-import type { RankedRetrievalEntry, RerankStrategy } from "./types/rerank";
+} from "../../lmstudio-shared/src/lmstudioCoreBridge";
+import { performModelAssistedRerank } from "../../lmstudio-shared/src/modelRerank";
+import type {
+  RankedRetrievalEntry,
+  RerankStrategy,
+} from "../../lmstudio-shared/src/rerankTypes";
 import {
   browseFileSystem,
   fileInfo,

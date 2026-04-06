@@ -8,6 +8,7 @@
     "typecheck": "npx -y -p typescript tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@lmstudio/sdk": "1.4.0"
+    "@lmstudio/sdk": "1.4.0",
+    "@rag-v2/core": "1.0.0"
   }
 }

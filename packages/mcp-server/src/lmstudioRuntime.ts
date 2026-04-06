@@ -10,13 +10,16 @@ import type {
   RagLoadedCorpus,
   RagMcpRuntime,
 } from "../../core/src/runtimeContracts";
-import { toRagCandidates, toRetrievalResultEntries } from "../../adapter-lmstudio/src/lmstudioCoreBridge";
-import { performModelAssistedRerank } from "../../adapter-lmstudio/src/modelRerank";
+import {
+  toRagCandidates,
+  toRetrievalResultEntries,
+} from "../../lmstudio-shared/src/lmstudioCoreBridge";
 import {
   resolveAutoDetectedEmbeddingModel,
   resolveRerankLlmModel,
 } from "../../lmstudio-shared/src/modelResolution";
-import type { RankedRetrievalEntry } from "../../adapter-lmstudio/src/types/rerank";
+import { performModelAssistedRerank } from "../../lmstudio-shared/src/modelRerank";
+import type { RankedRetrievalEntry } from "../../lmstudio-shared/src/rerankTypes";
 import {
   browseFileSystem,
   discoverSupportedTextFiles,

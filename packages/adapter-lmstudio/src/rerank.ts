@@ -1,5 +1,8 @@
 import type { RetrievalResultEntry } from "@lmstudio/sdk";
-import type { RankedRetrievalEntry, RerankOptions } from "./types/rerank";
+import type {
+  RankedRetrievalEntry,
+  RerankOptions,
+} from "../../lmstudio-shared/src/rerankTypes";
 
 const STOP_WORDS = new Set([
   "a",
