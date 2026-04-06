@@ -10,7 +10,10 @@ export type RagRequestedRoute =
   | "no-retrieval"
   | "full-context"
   | "retrieval"
-  | "corrective";
+  | "corrective"
+  | "sample"
+  | "hierarchical-retrieval"
+  | "global-summary";
 
 export type RagOutputMode =
   | "prepared-prompt"

@@ -92,11 +92,12 @@ export function createDefaultMcpRuntime(): RagMcpRuntime {
           chunkCount: corpus.chunkCount,
           estimatedTokens: corpus.estimatedTokens,
           recommendedRoute:
-            corpus.chunkCount && corpus.chunkCount > 0
+            corpus.analysis?.recommendedRoute ??
+            (corpus.chunkCount && corpus.chunkCount > 0
               ? "retrieval"
               : (corpus.estimatedTokens ?? 0) < 4000
                 ? "full-context"
-                : "retrieval",
+                : "retrieval"),
           fullContextViable: (corpus.estimatedTokens ?? 0) < 4000,
           retrievalRecommended:
             (corpus.chunkCount ?? 0) > 0 || (corpus.estimatedTokens ?? 0) >= 4000,

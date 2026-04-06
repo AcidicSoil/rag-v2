@@ -34,6 +34,7 @@ import {
   buildCoreGroundingInstruction,
   sanitizeCoreEvidenceBlocks,
 } from "./safety";
+import { analyzeLargeCorpus } from "./largeCorpus";
 import type {
   RagLoadedCorpus,
   RagOrchestrator,
@@ -59,7 +60,7 @@ export const orchestrateRagRequest: RagOrchestrator["run"] = async (
   const corpus = await loadCorpus(request, runtime);
   const diagnostics: RagDiagnostics = {
     route: "retrieval",
-    notes: [],
+    notes: [...(corpus.analysis?.notes ?? [])],
     degraded: !runtime.semanticRetriever,
     runtimeCapabilities: collectRuntimeCapabilities(runtime),
   };
@@ -87,6 +88,19 @@ export const orchestrateRagRequest: RagOrchestrator["run"] = async (
       runtime
     );
     return castOutput(fullContextOutput, request.outputMode);
+  }
+
+  if (route === "sample" || route === "global-summary") {
+    const largeCorpusOutput = await shapeLargeCorpusSummaryOutput(
+      request.query,
+      corpus,
+      route,
+      options,
+      diagnostics,
+      unsupportedClaimWarnings,
+      runtime
+    );
+    return castOutput(largeCorpusOutput, request.outputMode);
   }
 
   const retrievalResult = await runRetrievalFlow(request.query, corpus, options, runtime, route, diagnostics);
@@ -121,11 +135,19 @@ async function loadCorpus(
     chunks: request.chunks,
   };
 
-  if (runtime.documentParser) {
-    return runtime.documentParser.parse(input);
+  const baseCorpus = runtime.documentParser
+    ? await runtime.documentParser.parse(input)
+    : await runtime.loader.load(input);
+
+  const analysis = await analyzeLargeCorpus(request.paths, request.query, baseCorpus, runtime.browser);
+  if (!analysis) {
+    return baseCorpus;
   }
 
-  return runtime.loader.load(input);
+  return {
+    ...baseCorpus,
+    analysis,
+  };
 }
 
 async function evaluatePolicy(
@@ -208,6 +230,16 @@ async function determineRoute(
     return "prechunked-retrieval";
   }
 
+  if (corpus.analysis?.recommendedRoute) {
+    if (
+      corpus.analysis.recommendedRoute === "hierarchical-retrieval" &&
+      options.routing?.correctiveEnabled
+    ) {
+      return "corrective";
+    }
+    return corpus.analysis.recommendedRoute;
+  }
+
   if (runtime.contextSizer) {
     const sizing = await runtime.contextSizer.measure({ query, corpus, options });
     if (sizing.recommendedRoute) {
@@ -281,6 +313,73 @@ async function shapeFullContextOutput(
     diagnostics,
     unsupportedClaimWarnings: mergeWarnings(unsupportedClaimWarnings, composed.unsupportedClaimWarnings),
     confidence: composed.confidence,
+    groundingMode: options.policy?.groundingMode,
+  };
+}
+
+async function shapeLargeCorpusSummaryOutput(
+  query: string,
+  corpus: RagLoadedCorpus,
+  route: "sample" | "global-summary",
+  options: RagRequestOptions,
+  diagnostics: RagDiagnostics,
+  unsupportedClaimWarnings: Array<string>,
+  _runtime: RagOrchestratorRuntime
+): Promise<RagOrchestratorOutput> {
+  const summaryDocuments = corpus.analysis?.summaryDocuments ?? [];
+  const summaryCorpus: RagLoadedCorpus = {
+    ...corpus,
+    documents: summaryDocuments,
+    estimatedTokens: summaryDocuments.reduce(
+      (sum, document) => sum + Math.ceil(document.content.length / 4),
+      0
+    ),
+  };
+  const preparedPrompt = buildFullContextPrompt(
+    query,
+    summaryCorpus,
+    options.policy?.groundingMode ?? "warn-on-weak-evidence"
+  );
+
+  if (options.outputMode === "prepared-prompt") {
+    return {
+      mode: "prepared-prompt",
+      route,
+      preparedPrompt,
+      evidence: [],
+      diagnostics,
+      unsupportedClaimWarnings,
+    };
+  }
+
+  if (options.outputMode === "search-results") {
+    return {
+      mode: "search-results",
+      route,
+      candidates: [],
+      evidence: [],
+      diagnostics,
+      unsupportedClaimWarnings,
+    };
+  }
+
+  const answer = [
+    `Large-corpus ${route} mode selected for: ${query}`,
+    corpus.analysis?.notes.join(" ") ?? "",
+    ...summaryDocuments.slice(0, 3).map((document) => `${document.name}: ${document.content}`),
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  return {
+    mode: "answer-envelope",
+    route,
+    answer,
+    preparedPrompt,
+    evidence: [],
+    diagnostics,
+    unsupportedClaimWarnings,
+    confidence: summaryDocuments.length > 0 ? 0.55 : 0.2,
     groundingMode: options.policy?.groundingMode,
   };
 }

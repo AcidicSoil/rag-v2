@@ -188,14 +188,56 @@ export interface ReadFileResponse {
   errors?: Array<string>;
 }
 
+export interface RagFileSynopsis {
+  path: string;
+  resolvedPath: string;
+  extension?: string;
+  sizeBytes: number;
+  textLike: boolean;
+  oversized: boolean;
+  format: "jsonl" | "json" | "html" | "markdown" | "text";
+  sampleStrategy: "bounded-head" | "bounded-head-tail";
+  synopsis: string;
+  sampleHead?: string;
+  sampleTail?: string;
+}
+
+export interface RagDirectoryManifest {
+  path: string;
+  resolvedPath: string;
+  fileCount: number;
+  directoryCount: number;
+  topExtensions: Array<FileExtensionCount>;
+  representativeFiles: Array<string>;
+  oversizedFiles: Array<{
+    path: string;
+    sizeBytes: number;
+    extension?: string;
+  }>;
+  dominantModality: "text-heavy" | "binary-heavy" | "mixed" | "unknown";
+  truncated: boolean;
+}
+
+export interface RagCorpusAnalysis {
+  questionScope: "local" | "global";
+  targetType: "file" | "directory" | "mixed";
+  modality: "text-heavy" | "binary-heavy" | "mixed" | "unknown";
+  recommendedRoute: RagExecutionRoute;
+  notes: Array<string>;
+  summaryDocuments: Array<RagDocument>;
+  directoryManifests: Array<RagDirectoryManifest>;
+  largeFileSynopses: Array<RagFileSynopsis>;
+  oversizedPaths: Array<string>;
+}
+
 export interface RagLoadedCorpus {
   documents: Array<RagDocument>;
   candidates?: Array<RagCandidate>;
   fileCount: number;
   estimatedTokens?: number;
   chunkCount?: number;
+  analysis?: RagCorpusAnalysis;
 }
-
 
 export interface RagDocumentParser {
   parse(input: {

@@ -7,7 +7,10 @@ export type RagExecutionRoute =
   | "retrieval"
   | "corrective"
   | "prechunked-retrieval"
-  | "lightweight-retrieval";
+  | "lightweight-retrieval"
+  | "sample"
+  | "hierarchical-retrieval"
+  | "global-summary";
 
 export interface RagDiagnostics {
   route: RagExecutionRoute;

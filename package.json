@@ -20,6 +20,7 @@
     "smoke:corrective": "npx -y tsx scripts/smoke-corrective.ts",
     "smoke:core": "npx -y tsx scripts/smoke-core-pipeline.ts",
     "smoke:core-policy": "npx -y tsx scripts/smoke-core-policy.ts",
+    "smoke:large-corpus": "npx -y tsx scripts/smoke-large-corpus-routing.ts",
     "smoke:mcp": "npx -y tsx scripts/smoke-mcp-handlers.ts",
     "smoke:mcp-filesystem": "npx -y tsx scripts/smoke-mcp-filesystem.ts",
     "smoke:model-rerank": "npx -y tsx scripts/smoke-model-rerank.ts",

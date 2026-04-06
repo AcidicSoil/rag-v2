@@ -350,7 +350,8 @@ export function createLmStudioAdapterRuntime(
           chunkCount: corpus.chunkCount,
           estimatedTokens: corpus.estimatedTokens,
           recommendedRoute:
-            (corpus.estimatedTokens ?? 0) <= 4000 ? "full-context" : "retrieval",
+            corpus.analysis?.recommendedRoute ??
+            ((corpus.estimatedTokens ?? 0) <= 4000 ? "full-context" : "retrieval"),
           fullContextViable: (corpus.estimatedTokens ?? 0) <= 4000,
           retrievalRecommended: (corpus.estimatedTokens ?? 0) > 4000,
         };
