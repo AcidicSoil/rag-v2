@@ -271,6 +271,16 @@ export interface RagEmbeddingModelResolver {
   resolve(input: { options?: RagRequestOptions }): Promise<RagEmbeddingModelResolution>;
 }
 
+export interface RagRerankModelResolution {
+  modelId?: string;
+  source: "active-chat-model" | "manual" | "configured" | "auto-detected" | "unavailable";
+  autoUnload?: boolean;
+}
+
+export interface RagRerankModelResolver {
+  resolve(input: { options?: RagRequestOptions }): Promise<RagRerankModelResolution>;
+}
+
 export interface RagSemanticRetriever {
   search(input: {
     query: string;
@@ -376,6 +386,7 @@ export interface RagMcpRuntime {
   browser: RagFileSystemBrowser;
   documentParser?: RagDocumentParser;
   embeddingModelResolver?: RagEmbeddingModelResolver;
+  rerankModelResolver?: RagRerankModelResolver;
   semanticRetriever?: RagSemanticRetriever;
   llmReranker?: RagLlmReranker;
   contextSizer?: RagContextSizer;

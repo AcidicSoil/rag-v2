@@ -1,6 +1,5 @@
 import type {
   FileHandle,
-  LLMDynamicHandle,
   PromptPreprocessorController,
   RetrievalResultEntry,
 } from "@lmstudio/sdk";
@@ -22,12 +21,16 @@ import {
 } from "./lmstudioCoreBridge";
 import { performModelAssistedRerank } from "./modelRerank";
 import type { RankedRetrievalEntry, RerankStrategy } from "./types/rerank";
-import { AUTO_DETECT_MODEL_ID } from "./config";
 import {
   browseFileSystem,
   fileInfo,
   readTextFileRange,
 } from "./filesystem";
+import {
+  resolveEmbeddingModelForAdapter,
+  resolveRerankLlmModel,
+  type ResolvedRerankModel,
+} from "./lmstudioModelResolution";
 
 function estimateTokens(value: string) {
   return Math.ceil(value.trim().length / 4);
@@ -65,6 +68,8 @@ export function buildAdapterRequestOptions(pluginConfig: { get(key: string): any
       enabled: pluginConfig.get("rerankEnabled"),
       strategy: pluginConfig.get("rerankStrategy") as RerankStrategy,
       topK: pluginConfig.get("rerankTopK"),
+      modelSource: pluginConfig.get("modelRerankMode"),
+      modelId: pluginConfig.get("modelRerankModelId"),
     },
     safety: {
       sanitizeRetrievedText: pluginConfig.get("sanitizeRetrievedText"),
@@ -83,138 +88,39 @@ export function createLmStudioAdapterRuntime(
   cleanup: () => Promise<void>;
 } {
   let embeddingModelPromise: Promise<any> | undefined;
-  let rerankModelPromise:
-    | Promise<{
-        model: LLMDynamicHandle;
-        modelId?: string;
-        source: "active-chat-model" | "configured" | "auto-detected";
-        autoUnload: boolean;
-      }>
-    | undefined;
+  let rerankModelPromise: Promise<ResolvedRerankModel> | undefined;
+  let rerankModelCacheKey: string | undefined;
   let parsedDocumentsPromise:
     | Promise<Array<{ file: FileHandle; content: string }>>
     | undefined;
 
   const resolveEmbeddingModel = async () => {
     if (!embeddingModelPromise) {
-      embeddingModelPromise = (async () => {
-        const selectedModelId = pluginConfig.get("embeddingModel");
-        const manualModelId = pluginConfig.get("embeddingModelManual");
-        if (manualModelId && manualModelId.trim() !== "") {
-          return ctl.client.embedding.model(manualModelId.trim(), {
-            signal: ctl.abortSignal,
-          });
-        }
-        if (selectedModelId !== AUTO_DETECT_MODEL_ID) {
-          return ctl.client.embedding.model(selectedModelId, {
-            signal: ctl.abortSignal,
-          });
-        }
-
-        const loadedModels = await ctl.client.embedding.listLoaded();
-        if (loadedModels.length > 0) {
-          return loadedModels[0];
-        }
-
-        const downloadedModels = await ctl.client.system.listDownloadedModels("embedding");
-        const found =
-          downloadedModels.find((model) => {
-            const candidate = `${model.modelKey} ${model.path} ${model.displayName}`.toLowerCase();
-            return candidate.includes("embed");
-          }) ?? downloadedModels[0];
-
-        if (!found) {
-          throw new Error(
-            "No embedding model found. Please download one in LM Studio."
-          );
-        }
-
-        return ctl.client.embedding.model(found.modelKey, {
-          signal: ctl.abortSignal,
-        });
-      })();
+      embeddingModelPromise = resolveEmbeddingModelForAdapter({
+        client: ctl.client,
+        selectedModelId: pluginConfig.get("embeddingModel"),
+        manualModelId: pluginConfig.get("embeddingModelManual"),
+        signal: ctl.abortSignal,
+        autoUnload: pluginConfig.get("autoUnload"),
+      }).then((resolution) => resolution.model);
     }
 
     return embeddingModelPromise;
   };
 
-  const resolveRerankModel = async () => {
-    if (!rerankModelPromise) {
-      rerankModelPromise = (async () => {
-        const rerankMode =
-          (pluginConfig.get("modelRerankMode") as string | undefined) ??
-          "active-chat-model";
-        const manualModelId = String(
-          pluginConfig.get("modelRerankModelId") ?? ""
-        ).trim();
-        const shouldAutoUnload = Boolean(pluginConfig.get("autoUnload"));
-
-        if (rerankMode === "manual-model-id") {
-          if (!manualModelId) {
-            throw new Error(
-              "Model-assisted rerank is set to manual model mode but no rerank model ID is configured."
-            );
-          }
-
-          return {
-            model: (await ctl.client.llm.model(manualModelId, {
-              signal: ctl.abortSignal,
-            })) as LLMDynamicHandle,
-            modelId: manualModelId,
-            source: "configured" as const,
-            autoUnload: shouldAutoUnload,
-          };
-        }
-
-        if (rerankMode === "auto-detect") {
-          const loadedModels =
-            typeof ctl.client.llm.listLoaded === "function"
-              ? await ctl.client.llm.listLoaded()
-              : [];
-          if (loadedModels.length > 0) {
-            return {
-              model: loadedModels[0] as LLMDynamicHandle,
-              modelId: (loadedModels[0] as any)?.identifier,
-              source: "auto-detected" as const,
-              autoUnload: false,
-            };
-          }
-
-          const downloadedModels = await ctl.client.system.listDownloadedModels("llm");
-          const found =
-            downloadedModels.find((model) => {
-              const candidate = `${model.modelKey} ${model.path} ${model.displayName}`.toLowerCase();
-              return (
-                candidate.includes("instruct") ||
-                candidate.includes("chat") ||
-                candidate.includes("assistant")
-              );
-            }) ?? downloadedModels[0];
-
-          if (!found) {
-            throw new Error(
-              "No LLM model found for model-assisted reranking. Please download one in LM Studio."
-            );
-          }
-
-          return {
-            model: (await ctl.client.llm.model(found.modelKey, {
-              signal: ctl.abortSignal,
-            })) as LLMDynamicHandle,
-            modelId: found.modelKey,
-            source: "auto-detected" as const,
-            autoUnload: shouldAutoUnload,
-          };
-        }
-
-        const model = (await ctl.client.llm.model()) as LLMDynamicHandle;
-        return {
-          model,
-          modelId: undefined,
-          source: "active-chat-model" as const,
-          autoUnload: false,
-        };
-      })();
+  const resolveRerankModel = async (options?: RagRequestOptions) => {
+    const modelSource = options?.rerank?.modelSource ?? pluginConfig.get("modelRerankMode");
+    const modelId = options?.rerank?.modelId ?? pluginConfig.get("modelRerankModelId");
+    const cacheKey = `${modelSource ?? "active-chat-model"}::${String(modelId ?? "").trim()}`;
+    if (!rerankModelPromise || cacheKey !== rerankModelCacheKey) {
+      rerankModelCacheKey = cacheKey;
+      rerankModelPromise = resolveRerankLlmModel({
+        client: ctl.client,
+        modelSource,
+        modelId,
+        signal: ctl.abortSignal,
+        autoUnload: pluginConfig.get("autoUnload"),
+      });
     }
 
     return rerankModelPromise;
@@ -280,6 +186,26 @@ export function createLmStudioAdapterRuntime(
         };
       },
     },
+    rerankModelResolver: {
+      async resolve({ options }) {
+        const rerankEnabled = options?.rerank?.enabled ?? pluginConfig.get("rerankEnabled");
+        const rerankStrategy = options?.rerank?.strategy ?? pluginConfig.get("rerankStrategy");
+        if (!rerankEnabled || rerankStrategy !== "heuristic-then-llm") {
+          return {
+            modelId: undefined,
+            source: "unavailable" as const,
+            autoUnload: false,
+          };
+        }
+
+        const resolution = await resolveRerankModel(options);
+        return {
+          modelId: resolution.modelId,
+          source: resolution.source,
+          autoUnload: resolution.autoUnload,
+        };
+      },
+    },
     retriever: {
       async search({ query, corpus, options }) {
         if (corpus.candidates && corpus.candidates.length > 0) {
@@ -339,7 +265,7 @@ export function createLmStudioAdapterRuntime(
         const topK = options?.rerank?.topK ?? pluginConfig.get("rerankTopK");
         const modelRerankTopK = pluginConfig.get("modelRerankTopK");
         try {
-          const rerankResolution = await resolveRerankModel();
+          const rerankResolution = await resolveRerankModel(options);
           const heuristicEntries: Array<RankedRetrievalEntry> = toRetrievalResultEntries(candidates)
             .slice(0, modelRerankTopK)
             .map((entry) => ({

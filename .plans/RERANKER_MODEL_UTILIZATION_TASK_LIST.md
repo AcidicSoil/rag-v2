@@ -64,3 +64,10 @@ Current gaps:
 - Adding a separate non-LLM cross-encoder reranker engine.
 - Building a full MCP-side rerank model configuration surface matching the plugin UI.
 - Changing the degraded default runtime beyond honoring the shared rerank enable flag.
+
+
+## Follow-on parity work landed after the initial pass
+- [x] Added shared `rerankModelResolver` capability in `packages/core/src/runtimeContracts.ts`.
+- [x] Wired core diagnostics to report resolved rerank model usage when model-assisted reranking is active.
+- [x] Added MCP-side rerank model source parity and runtime resolution/caching.
+- [ ] Remaining follow-up: decide whether to factor embedding and rerank model resolution into a common shared helper/resolver abstraction.

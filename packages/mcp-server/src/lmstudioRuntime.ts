@@ -2,7 +2,6 @@ import path from "node:path";
 import {
   FileHandle,
   LMStudioClient,
-  type LLMDynamicHandle,
 } from "@lmstudio/sdk";
 import type { RagDocument } from "../../core/src/contracts";
 import { lexicalRetrieveFromDocuments } from "../../core/src/localRetrieval";
@@ -13,6 +12,10 @@ import type {
 } from "../../core/src/runtimeContracts";
 import { toRagCandidates, toRetrievalResultEntries } from "../../adapter-lmstudio/src/lmstudioCoreBridge";
 import { performModelAssistedRerank } from "../../adapter-lmstudio/src/modelRerank";
+import {
+  resolveAutoDetectedEmbeddingModel,
+  resolveRerankLlmModel,
+} from "../../adapter-lmstudio/src/lmstudioModelResolution";
 import type { RankedRetrievalEntry } from "../../adapter-lmstudio/src/types/rerank";
 import {
   browseFileSystem,
@@ -28,6 +31,7 @@ function estimateTokens(value: string) {
 
 export async function createLmStudioMcpRuntime(): Promise<RagMcpRuntime> {
   const client = new LMStudioClient();
+  const rerankModelCache = new Map();
 
   const loadCorpus = async (input: {
     documents?: Array<{ id: string; name: string; content: string; metadata?: Record<string, unknown> }>;
@@ -90,6 +94,31 @@ export async function createLmStudioMcpRuntime(): Promise<RagMcpRuntime> {
         };
       },
     },
+    rerankModelResolver: {
+      async resolve({ options }) {
+        const rerankEnabled = options?.rerank?.enabled ?? true;
+        const rerankStrategy = options?.rerank?.strategy ?? "heuristic-v1";
+        if (!rerankEnabled || rerankStrategy !== "heuristic-then-llm") {
+          return {
+            modelId: undefined,
+            source: "unavailable" as const,
+            autoUnload: false,
+          };
+        }
+
+        const resolution = await resolveRerankLlmModel({
+          client,
+          modelSource: options?.rerank?.modelSource,
+          modelId: options?.rerank?.modelId,
+          cache: rerankModelCache,
+        });
+        return {
+          modelId: resolution.modelId,
+          source: resolution.source,
+          autoUnload: false,
+        };
+      },
+    },
     retriever: {
       async search({ query, corpus, options }) {
         if (corpus.candidates && corpus.candidates.length > 0) {
@@ -132,7 +161,12 @@ export async function createLmStudioMcpRuntime(): Promise<RagMcpRuntime> {
       async rerank({ query, candidates, options }) {
         const topK = options?.rerank?.topK ?? 5;
         try {
-          const rerankResolution = await resolveRerankModel(client, options);
+          const rerankResolution = await resolveRerankLlmModel({
+            client,
+            modelSource: options?.rerank?.modelSource,
+            modelId: options?.rerank?.modelId,
+            cache: rerankModelCache,
+          });
           const heuristicEntries: Array<RankedRetrievalEntry> = toRetrievalResultEntries(candidates)
             .slice(0, topK)
             .map((entry) => ({
@@ -285,92 +319,11 @@ async function loadLmStudioPathDocuments(
 }
 
 async function resolveEmbeddingModel(client: LMStudioClient): Promise<any> {
-  const loadedModels = await client.embedding.listLoaded();
-  if (loadedModels.length > 0) {
-    return loadedModels[0];
-  }
-
-  const downloadedModels = await client.system.listDownloadedModels("embedding");
-  const found =
-    downloadedModels.find((model) => {
-      const candidate = `${model.modelKey} ${model.path} ${model.displayName}`.toLowerCase();
-      return candidate.includes("embed");
-    }) ?? downloadedModels[0];
-
-  if (!found) {
-    return undefined;
-  }
-
-  return client.embedding.model(found.modelKey);
-}
-
-async function resolveRerankModel(
-  client: LMStudioClient,
-  options?: { rerank?: { modelSource?: string; modelId?: string } }
-): Promise<{
-  model: LLMDynamicHandle;
-  modelId?: string;
-  source: "active-chat-model" | "configured" | "auto-detected";
-}> {
-  const modelSource = options?.rerank?.modelSource ?? "active-chat-model";
-  const modelId = options?.rerank?.modelId?.trim();
-
-  if (modelSource === "manual-model-id") {
-    if (!modelId) {
-      throw new Error(
-        "Model-assisted rerank is set to manual model mode but no rerank model ID was provided."
-      );
-    }
-
-    return {
-      model: (await client.llm.model(modelId)) as LLMDynamicHandle,
-      modelId,
-      source: "configured",
-    };
-  }
-
-  if (modelSource === "auto-detect") {
-    const loadedModels =
-      typeof client.llm.listLoaded === "function"
-        ? await client.llm.listLoaded()
-        : [];
-    if (loadedModels.length > 0) {
-      return {
-        model: loadedModels[0] as LLMDynamicHandle,
-        modelId: (loadedModels[0] as any)?.identifier,
-        source: "auto-detected",
-      };
-    }
-
-    const downloadedModels = await client.system.listDownloadedModels("llm");
-    const found =
-      downloadedModels.find((model) => {
-        const candidate = `${model.modelKey} ${model.path} ${model.displayName}`.toLowerCase();
-        return (
-          candidate.includes("instruct") ||
-          candidate.includes("chat") ||
-          candidate.includes("assistant")
-        );
-      }) ?? downloadedModels[0];
-
-    if (!found) {
-      throw new Error(
-        "No LLM model found for model-assisted reranking. Please download one in LM Studio."
-      );
-    }
-
-    return {
-      model: (await client.llm.model(found.modelKey)) as LLMDynamicHandle,
-      modelId: found.modelKey,
-      source: "auto-detected",
-    };
-  }
-
-  return {
-    model: (await client.llm.model()) as LLMDynamicHandle,
-    modelId: undefined,
-    source: "active-chat-model",
-  };
+  const resolution = await resolveAutoDetectedEmbeddingModel({
+    client,
+    autoUnload: true,
+  });
+  return resolution.model;
 }
 
 function extractFileHandles(corpus: RagLoadedCorpus): Array<FileHandle> {

@@ -524,6 +524,12 @@ async function finalizeCandidates(
     diagnostics.notes?.push(`Rerank enabled using strategy ${rerankStrategy}.`);
 
     if (runtime.llmReranker && rerankStrategy === "heuristic-then-llm") {
+      if (runtime.rerankModelResolver) {
+        const resolution = await runtime.rerankModelResolver.resolve({ options });
+        diagnostics.notes?.push(
+          `Resolved rerank model: ${resolution.modelId ?? "active chat model"} (${resolution.source}).`
+        );
+      }
       const llmRerankResult = await runtime.llmReranker.rerank({
         query,
         candidates: rerankedCandidates,
@@ -850,6 +856,9 @@ function collectRuntimeCapabilities(runtime: RagOrchestratorRuntime) {
   }
   if (runtime.embeddingModelResolver) {
     capabilities.push("embeddingModelResolver");
+  }
+  if (runtime.rerankModelResolver) {
+    capabilities.push("rerankModelResolver");
   }
   if (runtime.semanticRetriever) {
     capabilities.push("semanticRetriever");
