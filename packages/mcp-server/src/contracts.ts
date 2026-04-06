@@ -279,6 +279,7 @@ export const fileInfoOutputSchema = z.object({
   exists: z.boolean(),
   type: z.enum(["file", "directory"]).optional(),
   sizeBytes: z.number().int().nonnegative().optional(),
+  modifiedTimeMs: z.number().nonnegative().optional(),
   extension: z.string().optional(),
   textLike: z.boolean().optional(),
   childCount: z.number().int().nonnegative().optional(),

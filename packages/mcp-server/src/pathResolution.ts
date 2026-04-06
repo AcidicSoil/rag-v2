@@ -208,6 +208,7 @@ export async function fileInfo(input: FileInfoRequest): Promise<FileInfoResponse
       exists: true,
       type,
       sizeBytes: type === "file" ? normalizeStatSize(info.size) : undefined,
+      modifiedTimeMs: Number.isFinite(info.mtimeMs) ? info.mtimeMs : undefined,
       extension: type === "file" ? path.extname(resolvedPath).toLowerCase() || undefined : undefined,
       textLike: type === "file" ? isSupportedTextFile(resolvedPath) : undefined,
       childCount,

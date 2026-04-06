@@ -160,6 +160,7 @@ export interface FileInfoResponse {
   exists: boolean;
   type?: "file" | "directory";
   sizeBytes?: number;
+  modifiedTimeMs?: number;
   extension?: string;
   textLike?: boolean;
   childCount?: number;

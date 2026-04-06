@@ -86,6 +86,20 @@ async function main() {
       "Expected hierarchical retrieval to surface the target chunk with hierarchical metadata."
     );
 
+    const cachedLocalResult = await orchestrateRagRequest(
+      {
+        query: "Find the specific export routing evidence and hierarchy marker entry in this file.",
+        paths: [jsonlPath],
+        outputMode: "search-results",
+      },
+      runtime
+    );
+
+    assert(
+      cachedLocalResult.diagnostics.notes?.some((note) => note.includes("Reused cached large-corpus analysis")),
+      "Expected repeated large-corpus request to reuse cached analysis."
+    );
+
     console.log("Large-corpus routing smoke test passed.");
     console.log(`Global route: ${globalResult.route}`);
     console.log(`Local route: ${localResult.route}`);

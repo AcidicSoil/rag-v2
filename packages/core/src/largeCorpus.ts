@@ -14,6 +14,8 @@ import type {
 const LARGE_FILE_BYTES = 512 * 1024;
 const HUGE_FILE_BYTES = 2 * 1024 * 1024;
 const BINARY_HEAVY_THRESHOLD = 0.6;
+const LARGE_CORPUS_CACHE_LIMIT = 32;
+const largeCorpusAnalysisCache = new Map<string, RagCorpusAnalysis>();
 const GLOBAL_QUERY_PATTERNS = [
   /\b(overall|summarize|summary|overview|what(?:'s| is) in|what does .* contain)\b/i,
   /\bthemes?|topics?|patterns?|dominant|across the corpus|across the dataset|across the directory\b/i,
@@ -48,6 +50,7 @@ export async function analyzeLargeCorpus(
   const synopses: Array<RagFileSynopsis> = [];
   const notes: Array<string> = [];
   const oversizedPaths: Array<string> = [];
+  const inspectedInfos: Array<FileInfoResponse> = [];
   let sawDirectory = false;
   let sawFile = false;
   let textHeavyScore = 0;
@@ -55,7 +58,18 @@ export async function analyzeLargeCorpus(
 
   for (const inputPath of paths.slice(0, 8)) {
     const info = await browser.fileInfo({ path: inputPath });
-    if (!info.exists || !info.type) {
+    inspectedInfos.push(info);
+  }
+
+  const cacheKey = buildLargeCorpusCacheKey(questionScope, inspectedInfos);
+  const cached = largeCorpusAnalysisCache.get(cacheKey);
+  if (cached) {
+    return cloneAnalysis(cached, `Reused cached large-corpus analysis for ${inspectedInfos.length} path(s).`);
+  }
+
+  for (const [index, inputPath] of paths.slice(0, 8).entries()) {
+    const info = inspectedInfos[index];
+    if (!info?.exists || !info.type) {
       notes.push(`Path could not be inspected: ${inputPath}.`);
       continue;
     }
@@ -126,7 +140,7 @@ export async function analyzeLargeCorpus(
     notes.push(`Built hierarchical index with ${hierarchicalIndex.nodes.length} parent nodes.`);
   }
 
-  return {
+  const analysis = {
     questionScope,
     targetType,
     modality,
@@ -137,6 +151,58 @@ export async function analyzeLargeCorpus(
     largeFileSynopses: synopses,
     oversizedPaths: [...new Set(oversizedPaths)],
     hierarchicalIndex,
+  } satisfies RagCorpusAnalysis;
+
+  setLargeCorpusCache(cacheKey, analysis);
+  return cloneAnalysis(analysis);
+}
+
+function buildLargeCorpusCacheKey(
+  questionScope: "local" | "global",
+  infos: Array<FileInfoResponse>
+): string {
+  const parts = infos.map((info) => {
+    if (!info.exists) {
+      return [info.resolvedPath, "missing"].join("|");
+    }
+    return [
+      info.resolvedPath,
+      info.type ?? "unknown",
+      info.modifiedTimeMs ?? "nomtime",
+      info.sizeBytes ?? "nosize",
+      info.fileCount ?? "nofiles",
+      info.directoryCount ?? "nodirs",
+    ].join("|");
+  });
+
+  return `${questionScope}::${parts.join("::")}`;
+}
+
+function setLargeCorpusCache(key: string, analysis: RagCorpusAnalysis) {
+  if (largeCorpusAnalysisCache.has(key)) {
+    largeCorpusAnalysisCache.delete(key);
+  }
+  largeCorpusAnalysisCache.set(key, analysis);
+  while (largeCorpusAnalysisCache.size > LARGE_CORPUS_CACHE_LIMIT) {
+    const oldestKey = largeCorpusAnalysisCache.keys().next().value;
+    if (!oldestKey) {
+      break;
+    }
+    largeCorpusAnalysisCache.delete(oldestKey);
+  }
+}
+
+function cloneAnalysis(
+  analysis: RagCorpusAnalysis,
+  extraNote?: string
+): RagCorpusAnalysis {
+  return {
+    ...analysis,
+    notes: extraNote ? [...analysis.notes, extraNote] : [...analysis.notes],
+    summaryDocuments: [...analysis.summaryDocuments],
+    directoryManifests: [...analysis.directoryManifests],
+    largeFileSynopses: [...analysis.largeFileSynopses],
+    oversizedPaths: [...analysis.oversizedPaths],
   };
 }
 
