@@ -38,7 +38,7 @@ import {
   buildCoreGroundingInstruction,
   sanitizeCoreEvidenceBlocks,
 } from "./safety";
-import { analyzeLargeCorpus } from "./largeCorpus";
+import { analyzeLargeCorpus, analyzeLargeDocumentCorpus } from "./largeCorpus";
 import type {
   RagLoadedCorpus,
   RagOrchestrator,
@@ -143,7 +143,16 @@ async function loadCorpus(
     ? await runtime.documentParser.parse(input)
     : await runtime.loader.load(input);
 
-  const analysis = await analyzeLargeCorpus(request.paths, request.query, baseCorpus, runtime.browser);
+  const analysis = request.paths?.length
+    ? await analyzeLargeCorpus(
+        request.paths,
+        request.query,
+        baseCorpus,
+        runtime.browser,
+        runtime.largeCorpusAnalysisStore,
+        runtime.hierarchicalIndexStore
+      )
+    : analyzeLargeDocumentCorpus(request.query, baseCorpus);
   if (!analysis) {
     return baseCorpus;
   }

@@ -370,6 +370,13 @@ export function createLmStudioAdapterRuntime(
             ((corpus.estimatedTokens ?? 0) <= 4000 ? "full-context" : "retrieval"),
           fullContextViable: (corpus.estimatedTokens ?? 0) <= 4000,
           retrievalRecommended: (corpus.estimatedTokens ?? 0) > 4000,
+          questionScope: corpus.analysis?.questionScope,
+          targetType: corpus.analysis?.targetType,
+          modality: corpus.analysis?.modality,
+          analysisNotes: corpus.analysis?.notes,
+          directoryManifests: corpus.analysis?.directoryManifests,
+          largeFileSynopses: corpus.analysis?.largeFileSynopses,
+          oversizedPaths: corpus.analysis?.oversizedPaths,
         };
       },
     },

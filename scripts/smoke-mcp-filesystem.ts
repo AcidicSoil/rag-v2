@@ -105,8 +105,33 @@ async function main() {
 
     const inspect = await handlers.corpusInspect({
       paths: [tempRoot],
+      query: "What is in this dataset overall? Give me a high-level inventory of the corpus.",
     });
     assert(inspect.fileCount === 2, "Expected filesystem corpus inspection to load two text files.");
+    assert(inspect.questionScope === "global", "Expected corpus inspection to classify the inventory query as global.");
+    assert(inspect.targetType === "directory", "Expected corpus inspection to classify the target as a directory.");
+    assert(
+      inspect.directoryManifests?.some((manifest) => manifest.resolvedPath === tempRoot),
+      "Expected corpus inspection to return a directory manifest for the inspected root."
+    );
+    assert(
+      inspect.directoryManifests?.[0]?.representativeFiles.some((value) => value.includes("architecture.md")),
+      "Expected corpus inspection to include representative files from the inspected directory."
+    );
+    assert(
+      inspect.analysisNotes?.some((note) => note.includes("Large-corpus analysis classified")),
+      "Expected corpus inspection to expose grounded large-corpus analysis notes."
+    );
+
+    const fileInspect = await handlers.corpusInspect({
+      paths: [path.join(tempRoot, "architecture.md")],
+      query: "What is in this file overall?",
+    });
+    assert(fileInspect.targetType === "file", "Expected single-file corpus inspection to classify the target as a file.");
+    assert(
+      fileInspect.largeFileSynopses?.some((synopsis) => synopsis.path.includes("architecture.md")),
+      "Expected single-file corpus inspection to return a grounded file synopsis."
+    );
 
     const search = await handlers.ragSearch({
       query: "failover consistency tradeoff",

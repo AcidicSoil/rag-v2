@@ -142,6 +142,11 @@ async function prepareRetrievalResultsContextInjection(
         status: "done",
         text: `Retrieved ${output.evidence.length} relevant citations for user query`,
       });
+    } else if (output.route === "global-summary" || output.route === "sample") {
+      retrievingStatus.setState({
+        status: "done",
+        text: `Prepared grounded ${output.route} context from corpus manifests and file synopses`,
+      });
     } else {
       retrievingStatus.setState({
         status: "canceled",

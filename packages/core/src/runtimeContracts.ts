@@ -64,6 +64,7 @@ export interface CorpusInspectRequest {
   documents?: Array<RagInlineDocumentInput>;
   paths?: Array<string>;
   chunks?: Array<RagPrechunkedCandidateInput>;
+  query?: string;
 }
 
 export interface RerankOnlyRequest {
@@ -128,6 +129,13 @@ export interface CorpusInspectResponse {
   recommendedRoute: string;
   fullContextViable: boolean;
   retrievalRecommended: boolean;
+  questionScope?: "local" | "global";
+  targetType?: "file" | "directory" | "mixed";
+  modality?: "text-heavy" | "binary-heavy" | "mixed" | "unknown";
+  analysisNotes?: Array<string>;
+  directoryManifests?: Array<RagDirectoryManifest>;
+  largeFileSynopses?: Array<RagFileSynopsis>;
+  oversizedPaths?: Array<string>;
 }
 
 export interface RerankOnlyResponse {
@@ -370,6 +378,16 @@ export interface RagDocumentLoader {
   }): Promise<RagLoadedCorpus>;
 }
 
+export interface RagLargeCorpusAnalysisStore {
+  get(key: string): Promise<RagCorpusAnalysis | undefined>;
+  set(key: string, analysis: RagCorpusAnalysis): Promise<void>;
+}
+
+export interface RagHierarchicalIndexStore {
+  get(key: string): Promise<RagHierarchicalIndex | undefined>;
+  set(key: string, index: RagHierarchicalIndex): Promise<void>;
+}
+
 export interface RagRetriever {
   search(input: {
     query: string;
@@ -385,6 +403,8 @@ export interface RagMcpRuntime {
   inspector: RagInspector;
   browser: RagFileSystemBrowser;
   documentParser?: RagDocumentParser;
+  largeCorpusAnalysisStore?: RagLargeCorpusAnalysisStore;
+  hierarchicalIndexStore?: RagHierarchicalIndexStore;
   embeddingModelResolver?: RagEmbeddingModelResolver;
   rerankModelResolver?: RagRerankModelResolver;
   semanticRetriever?: RagSemanticRetriever;

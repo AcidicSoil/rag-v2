@@ -1,4 +1,5 @@
 import { rerankRagCandidates } from "../../core/src/retrievalPipeline";
+import { analyzeLargeCorpus } from "../../core/src/largeCorpus";
 import { orchestrateRagRequest } from "../../core/src/orchestrator";
 import type {
   RagAnswerEnvelopeOutput,
@@ -120,7 +121,15 @@ export function createMcpToolHandlers(runtime: RagMcpRuntime): RagToolHandlerSet
     async corpusInspect(input: CorpusInspectInput) {
       const parsed = corpusInspectInputSchema.parse(input);
       const corpus = await runtime.loader.load(parsed);
-      return runtime.inspector.inspect({ corpus });
+      const analysis = await analyzeLargeCorpus(
+        parsed.paths,
+        parsed.query ?? "What is in this dataset overall? Give me a high-level inventory of the corpus.",
+        corpus,
+        runtime.browser
+      );
+      return runtime.inspector.inspect({
+        corpus: analysis ? { ...corpus, analysis } : corpus,
+      });
     },
 
     async rerankOnly(input: RerankOnlyInput) {

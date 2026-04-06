@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
+import { clearLargeCorpusAnalysisCacheForTests } from "../packages/core/src/largeCorpus";
 import { orchestrateRagRequest } from "../packages/core/src/orchestrator";
 import { createDefaultMcpRuntime } from "../packages/mcp-server/src/defaultRuntime";
 
@@ -51,6 +52,43 @@ async function main() {
     assert(
       globalResult.preparedPrompt.includes("manifest:"),
       "Expected prepared prompt to include generated directory manifest context."
+    );
+
+    const attachedDocumentResult = await orchestrateRagRequest(
+      {
+        query: "What is in these attached files overall? Give me a high-level inventory.",
+        documents: [
+          {
+            id: "attached-1",
+            name: "dataset-export-1.jsonl",
+            content: Array.from({ length: 9000 }, (_, index) =>
+              JSON.stringify({
+                conversation_id: `conv-${index + 1}`,
+                topic: index % 2 === 0 ? "billing" : "support",
+                content: "Attached export record with repeated structured chat content.",
+              })
+            ).join("\n"),
+            metadata: {
+              path: "dataset-export-1.jsonl",
+            },
+          },
+        ],
+        outputMode: "prepared-prompt",
+      },
+      runtime
+    );
+
+    assert(
+      attachedDocumentResult.route === "global-summary",
+      "Expected overview question on attached documents to use global-summary route."
+    );
+    assert(
+      attachedDocumentResult.preparedPrompt.includes("synopsis:dataset-export-1.jsonl"),
+      "Expected prepared prompt to include generated file synopsis context for attached documents."
+    );
+    assert(
+      attachedDocumentResult.diagnostics.notes?.some((note) => note.includes("document analysis classified")),
+      "Expected diagnostics to record document-backed large-corpus analysis."
     );
 
     const jsonlPath = path.join(tempRoot, "dataclaw_export.jsonl");
@@ -122,6 +160,40 @@ async function main() {
         note.includes("Reused cached large-corpus analysis")
       ),
       "Expected repeated large-corpus request to reuse cached analysis."
+    );
+
+    clearLargeCorpusAnalysisCacheForTests();
+    const persistedRuntime = createDefaultMcpRuntime();
+    const persistedLocalResult = await orchestrateRagRequest(
+      {
+        query:
+          "Find the specific export routing evidence and hierarchy marker entry in this file.",
+        paths: [jsonlPath],
+        outputMode: "search-results",
+      },
+      persistedRuntime
+    );
+
+    assert(
+      persistedLocalResult.diagnostics.notes?.some((note) =>
+        note.includes("Reused persisted large-corpus analysis")
+      ),
+      "Expected fresh-runtime large-corpus request to reuse persisted analysis."
+    );
+    assert(
+      persistedLocalResult.diagnostics.notes?.some((note) =>
+        note.includes("Reused persisted hierarchical index") ||
+        note.includes("Rebuilt hierarchical index")
+      ),
+      "Expected persisted-analysis reuse to report hierarchical index reuse or rebuild."
+    );
+    assert(
+      persistedLocalResult.candidates.some(
+        (candidate) =>
+          candidate.content.includes("hierarchy marker") &&
+          candidate.metadata?.retrievalMode === "hierarchical-retrieval"
+      ),
+      "Expected persisted-analysis reuse to rebuild hierarchical retrieval context and surface the target chunk."
     );
 
     const correctiveResult = await orchestrateRagRequest(

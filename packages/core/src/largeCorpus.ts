@@ -8,6 +8,8 @@ import type {
   RagDirectoryManifest,
   RagFileSynopsis,
   RagFileSystemBrowser,
+  RagHierarchicalIndexStore,
+  RagLargeCorpusAnalysisStore,
   RagLoadedCorpus,
 } from "./runtimeContracts";
 
@@ -39,7 +41,9 @@ export async function analyzeLargeCorpus(
   paths: Array<string> | undefined,
   query: string,
   corpus: RagLoadedCorpus,
-  browser: RagFileSystemBrowser | undefined
+  browser: RagFileSystemBrowser | undefined,
+  analysisStore?: RagLargeCorpusAnalysisStore,
+  hierarchicalIndexStore?: RagHierarchicalIndexStore
 ): Promise<RagCorpusAnalysis | undefined> {
   if (!browser || !paths || paths.length === 0) {
     return undefined;
@@ -65,6 +69,21 @@ export async function analyzeLargeCorpus(
   const cached = largeCorpusAnalysisCache.get(cacheKey);
   if (cached) {
     return cloneAnalysis(cached, `Reused cached large-corpus analysis for ${inspectedInfos.length} path(s).`);
+  }
+
+  const persisted = await analysisStore?.get(cacheKey);
+  if (persisted) {
+    const hydrated = await hydratePersistedAnalysis(
+      persisted,
+      corpus,
+      cacheKey,
+      hierarchicalIndexStore
+    );
+    setLargeCorpusCache(cacheKey, hydrated);
+    const reuseNote = hydrated.notes.some((note) => note.includes("Reused persisted hierarchical index"))
+      ? `Reused persisted large-corpus analysis for ${inspectedInfos.length} path(s).`
+      : `Reused persisted large-corpus analysis for ${inspectedInfos.length} path(s).`;
+    return cloneAnalysis(hydrated, reuseNote);
   }
 
   for (const [index, inputPath] of paths.slice(0, 8).entries()) {
@@ -117,12 +136,13 @@ export async function analyzeLargeCorpus(
           : "mixed";
 
   const summaryDocuments = buildSummaryDocuments(manifests, synopses);
-  const hierarchicalIndex = shouldBuildHierarchicalIndex({
+  const needsHierarchicalIndex = shouldBuildHierarchicalIndex({
     questionScope,
     oversizedPaths,
     modality,
     targetType,
-  })
+  });
+  const hierarchicalIndex = needsHierarchicalIndex
     ? buildHierarchicalDocumentIndex(selectHierarchicalDocuments(corpus.documents, synopses, oversizedPaths))
     : undefined;
   const recommendedRoute = recommendLargeCorpusRoute({
@@ -154,7 +174,63 @@ export async function analyzeLargeCorpus(
   } satisfies RagCorpusAnalysis;
 
   setLargeCorpusCache(cacheKey, analysis);
+  await analysisStore?.set(cacheKey, stripAnalysisForPersistence(analysis));
+  if (hierarchicalIndex) {
+    await hierarchicalIndexStore?.set(cacheKey, hierarchicalIndex);
+  }
   return cloneAnalysis(analysis);
+}
+
+export function analyzeLargeDocumentCorpus(
+  query: string,
+  corpus: RagLoadedCorpus
+): RagCorpusAnalysis | undefined {
+  if (corpus.documents.length === 0) {
+    return undefined;
+  }
+
+  const questionScope = inferQuestionScope(query);
+  const synopses = corpus.documents.map((document) => buildDocumentSynopsis(document));
+  const oversizedPaths = synopses.filter((synopsis) => synopsis.oversized).map((synopsis) => synopsis.path);
+  const targetType = corpus.documents.length === 1 ? "file" : "mixed";
+  const modality = inferDocumentCorpusModality(synopses);
+  const summaryDocuments = buildSummaryDocuments([], synopses);
+  const hierarchicalIndex = shouldBuildHierarchicalIndex({
+    questionScope,
+    oversizedPaths,
+    modality,
+    targetType,
+  })
+    ? buildHierarchicalDocumentIndex(selectHierarchicalDocuments(corpus.documents, synopses, oversizedPaths))
+    : undefined;
+  const recommendedRoute = recommendLargeCorpusRoute({
+    questionScope,
+    targetType,
+    modality,
+    oversizedFileCount: oversizedPaths.length,
+    corpus,
+  });
+
+  const analysis = {
+    questionScope,
+    targetType,
+    modality,
+    recommendedRoute,
+    notes: [
+      `Large-corpus document analysis classified scope=${questionScope}, target=${targetType}, modality=${modality}, oversizedFiles=${oversizedPaths.length}.`,
+    ],
+    summaryDocuments,
+    directoryManifests: [],
+    largeFileSynopses: synopses,
+    oversizedPaths: [...new Set(oversizedPaths)],
+    hierarchicalIndex,
+  } satisfies RagCorpusAnalysis;
+
+  if (hierarchicalIndex) {
+    analysis.notes.push(`Built hierarchical index with ${hierarchicalIndex.nodes.length} parent nodes.`);
+  }
+
+  return analysis;
 }
 
 function buildLargeCorpusCacheKey(
@@ -190,6 +266,59 @@ function setLargeCorpusCache(key: string, analysis: RagCorpusAnalysis) {
     }
     largeCorpusAnalysisCache.delete(oldestKey);
   }
+}
+
+function stripAnalysisForPersistence(
+  analysis: RagCorpusAnalysis
+): RagCorpusAnalysis {
+  return {
+    ...analysis,
+    notes: [...analysis.notes],
+    summaryDocuments: [...analysis.summaryDocuments],
+    directoryManifests: [...analysis.directoryManifests],
+    largeFileSynopses: [...analysis.largeFileSynopses],
+    oversizedPaths: [...analysis.oversizedPaths],
+    hierarchicalIndex: undefined,
+  };
+}
+
+async function hydratePersistedAnalysis(
+  analysis: RagCorpusAnalysis,
+  corpus: RagLoadedCorpus,
+  cacheKey: string,
+  hierarchicalIndexStore?: RagHierarchicalIndexStore
+): Promise<RagCorpusAnalysis> {
+  const hydrated = cloneAnalysis(analysis);
+  if (!hydrated.hierarchicalIndex && shouldBuildHierarchicalIndex({
+    questionScope: hydrated.questionScope,
+    oversizedPaths: hydrated.oversizedPaths,
+    modality: hydrated.modality,
+    targetType: hydrated.targetType,
+  })) {
+    const persistedIndex = await hierarchicalIndexStore?.get(cacheKey);
+    if (persistedIndex) {
+      hydrated.hierarchicalIndex = persistedIndex;
+      hydrated.notes.push(
+        `Reused persisted hierarchical index with ${persistedIndex.nodes.length} parent nodes.`
+      );
+    } else {
+      hydrated.hierarchicalIndex = buildHierarchicalDocumentIndex(
+        selectHierarchicalDocuments(
+          corpus.documents,
+          hydrated.largeFileSynopses,
+          hydrated.oversizedPaths
+        )
+      );
+      hydrated.notes.push(
+        `Rebuilt hierarchical index with ${hydrated.hierarchicalIndex.nodes.length} parent nodes after persisted analysis reuse.`
+      );
+    }
+  }
+  return hydrated;
+}
+
+export function clearLargeCorpusAnalysisCacheForTests() {
+  largeCorpusAnalysisCache.clear();
 }
 
 function cloneAnalysis(
@@ -288,6 +417,82 @@ async function buildFileSynopsis(
     sampleHead: truncateForMetadata(head?.content),
     sampleTail: truncateForMetadata(tail?.content),
   };
+}
+
+function buildDocumentSynopsis(document: RagDocument): RagFileSynopsis {
+  const inferredPath = inferDocumentPath(document);
+  const extension = inferDocumentExtension(document, inferredPath);
+  const format = detectFormat(extension);
+  const sizeBytes = Buffer.byteLength(document.content, "utf8");
+  const textLike = looksTextLike(document.content);
+  const sampleHead = truncateForMetadata(document.content.slice(0, 8000));
+  const sampleTail =
+    sizeBytes >= LARGE_FILE_BYTES
+      ? truncateForMetadata(document.content.slice(Math.max(0, document.content.length - 8000)))
+      : undefined;
+
+  return {
+    path: inferredPath,
+    resolvedPath: inferredPath,
+    extension,
+    sizeBytes,
+    textLike,
+    oversized: sizeBytes >= LARGE_FILE_BYTES,
+    format,
+    synopsis: summarizeSample(format, sampleHead, sampleTail),
+    sampleStrategy: sizeBytes >= HUGE_FILE_BYTES ? "bounded-head-tail" : "bounded-head",
+    sampleHead,
+    sampleTail,
+  };
+}
+
+function inferDocumentCorpusModality(
+  synopses: Array<RagFileSynopsis>
+): RagCorpusAnalysis["modality"] {
+  if (synopses.length === 0) {
+    return "unknown";
+  }
+
+  const textCount = synopses.filter((synopsis) => synopsis.textLike).length;
+  const binaryCount = synopses.length - textCount;
+  if (binaryCount / synopses.length >= BINARY_HEAVY_THRESHOLD) {
+    return "binary-heavy";
+  }
+  if (textCount === synopses.length) {
+    return "text-heavy";
+  }
+  return textCount >= binaryCount ? "mixed" : "binary-heavy";
+}
+
+function inferDocumentPath(document: RagDocument): string {
+  const candidate =
+    (typeof document.metadata?.discoveredPath === "string" && document.metadata.discoveredPath) ||
+    (typeof document.metadata?.absolutePath === "string" && document.metadata.absolutePath) ||
+    (typeof document.metadata?.path === "string" && document.metadata.path) ||
+    document.name ||
+    document.id;
+  return candidate;
+}
+
+function inferDocumentExtension(document: RagDocument, inferredPath: string): string | undefined {
+  const metadataExtension =
+    typeof document.metadata?.extension === "string" ? document.metadata.extension : undefined;
+  return normalizeExtension(metadataExtension ?? inferredPath.split("/").pop()?.match(/(\.[^.]+)$/)?.[1]);
+}
+
+function looksTextLike(value: string): boolean {
+  if (!value) {
+    return false;
+  }
+  let suspicious = 0;
+  const sample = value.slice(0, 2048);
+  for (let index = 0; index < sample.length; index += 1) {
+    const code = sample.charCodeAt(index);
+    if (code === 65533 || (code < 9 || (code > 13 && code < 32))) {
+      suspicious += 1;
+    }
+  }
+  return suspicious / Math.max(sample.length, 1) < 0.05;
 }
 
 function detectFormat(extension?: string): RagFileSynopsis["format"] {

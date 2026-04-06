@@ -27,6 +27,8 @@ import {
   readTextFileRange,
   resolveUserPath,
 } from "./pathResolution";
+import { createFilesystemLargeCorpusAnalysisStore } from "./largeCorpusAnalysisStore";
+import { createFilesystemHierarchicalIndexStore } from "./hierarchicalIndexStore";
 
 function estimateTokens(value: string) {
   return Math.ceil(value.trim().length / 4);
@@ -35,6 +37,8 @@ function estimateTokens(value: string) {
 export async function createLmStudioMcpRuntime(): Promise<RagMcpRuntime> {
   const client = new LMStudioClient();
   const rerankModelCache = new Map();
+  const largeCorpusAnalysisStore = createFilesystemLargeCorpusAnalysisStore();
+  const hierarchicalIndexStore = createFilesystemHierarchicalIndexStore();
 
   const loadCorpus = async (input: {
     documents?: Array<{ id: string; name: string; content: string; metadata?: Record<string, unknown> }>;
@@ -232,6 +236,8 @@ export async function createLmStudioMcpRuntime(): Promise<RagMcpRuntime> {
         return buildRagEvidenceBlocks(candidates);
       },
     },
+    largeCorpusAnalysisStore,
+    hierarchicalIndexStore,
     answerComposer: {
       async answer({ query, evidence, route, groundingMode }) {
         if (evidence.length === 0) {
@@ -267,6 +273,13 @@ export async function createLmStudioMcpRuntime(): Promise<RagMcpRuntime> {
           fullContextViable: (corpus.estimatedTokens ?? 0) <= 4000,
           retrievalRecommended:
             (corpus.chunkCount ?? 0) > 0 || (corpus.estimatedTokens ?? 0) > 4000,
+          questionScope: corpus.analysis?.questionScope,
+          targetType: corpus.analysis?.targetType,
+          modality: corpus.analysis?.modality,
+          analysisNotes: corpus.analysis?.notes,
+          directoryManifests: corpus.analysis?.directoryManifests,
+          largeFileSynopses: corpus.analysis?.largeFileSynopses,
+          oversizedPaths: corpus.analysis?.oversizedPaths,
         };
       },
     },

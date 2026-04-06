@@ -283,8 +283,9 @@ export function createOfficialMcpServer(handlers: RagToolHandlerSet) {
     "corpus_inspect",
     {
       description:
-        "Inspect a corpus and recommend whether full-context or retrieval is more appropriate.",
+        "Inspect a corpus, return a high-level grounded inventory for filesystem-backed datasets, and recommend whether full-context or retrieval is more appropriate.",
       inputSchema: {
+        query: z.string().min(1).optional().describe("Optional inventory/scope query to guide corpus inspection"),
         ...corpusInputShape,
       } as any,
     },

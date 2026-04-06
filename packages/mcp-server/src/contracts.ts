@@ -174,7 +174,19 @@ export const ragPreparePromptInputSchema = corpusInputBaseSchema
     }
   );
 
-export const corpusInspectInputSchema = corpusInputSchema;
+export const corpusInspectInputSchema = corpusInputBaseSchema
+  .extend({
+    query: z.string().min(1).optional(),
+  })
+  .refine(
+    (value) =>
+      (value.documents?.length ?? 0) > 0 ||
+      (value.paths?.length ?? 0) > 0 ||
+      (value.chunks?.length ?? 0) > 0,
+    {
+      message: "Provide at least one of documents, paths, or chunks.",
+    }
+  );
 
 export const rerankOnlyInputSchema = z.object({
   query: z.string().min(1),
@@ -235,20 +247,6 @@ export const ragPreparePromptOutputSchema = z.object({
   unsupportedClaimWarnings: z.array(z.string()),
 });
 
-export const corpusInspectOutputSchema = z.object({
-  fileCount: z.number().int().nonnegative(),
-  chunkCount: z.number().int().nonnegative().optional(),
-  estimatedTokens: z.number().int().nonnegative().optional(),
-  recommendedRoute: z.string(),
-  fullContextViable: z.boolean(),
-  retrievalRecommended: z.boolean(),
-});
-
-export const rerankOnlyOutputSchema = z.object({
-  candidates: z.array(prechunkedCandidateSchema),
-  reasons: z.array(z.string()).optional(),
-});
-
 export const filesystemBrowseEntrySchema = z.object({
   path: z.string(),
   name: z.string(),
@@ -260,6 +258,59 @@ export const filesystemBrowseEntrySchema = z.object({
 export const fileExtensionCountSchema = z.object({
   extension: z.string(),
   count: z.number().int().nonnegative(),
+});
+
+export const directoryManifestSchema = z.object({
+  path: z.string(),
+  resolvedPath: z.string(),
+  fileCount: z.number().int().nonnegative(),
+  directoryCount: z.number().int().nonnegative(),
+  topExtensions: z.array(fileExtensionCountSchema),
+  representativeFiles: z.array(z.string()),
+  oversizedFiles: z.array(
+    z.object({
+      path: z.string(),
+      sizeBytes: z.number().int().nonnegative(),
+      extension: z.string().optional(),
+    })
+  ),
+  dominantModality: z.enum(["text-heavy", "binary-heavy", "mixed", "unknown"]),
+  truncated: z.boolean(),
+});
+
+export const fileSynopsisSchema = z.object({
+  path: z.string(),
+  resolvedPath: z.string(),
+  extension: z.string().optional(),
+  sizeBytes: z.number().int().nonnegative(),
+  textLike: z.boolean(),
+  oversized: z.boolean(),
+  format: z.enum(["jsonl", "json", "html", "markdown", "text"]),
+  sampleStrategy: z.enum(["bounded-head", "bounded-head-tail"]),
+  synopsis: z.string(),
+  sampleHead: z.string().optional(),
+  sampleTail: z.string().optional(),
+});
+
+export const corpusInspectOutputSchema = z.object({
+  fileCount: z.number().int().nonnegative(),
+  chunkCount: z.number().int().nonnegative().optional(),
+  estimatedTokens: z.number().int().nonnegative().optional(),
+  recommendedRoute: z.string(),
+  fullContextViable: z.boolean(),
+  retrievalRecommended: z.boolean(),
+  questionScope: z.enum(["local", "global"]).optional(),
+  targetType: z.enum(["file", "directory", "mixed"]).optional(),
+  modality: z.enum(["text-heavy", "binary-heavy", "mixed", "unknown"]).optional(),
+  analysisNotes: z.array(z.string()).optional(),
+  directoryManifests: z.array(directoryManifestSchema).optional(),
+  largeFileSynopses: z.array(fileSynopsisSchema).optional(),
+  oversizedPaths: z.array(z.string()).optional(),
+});
+
+export const rerankOnlyOutputSchema = z.object({
+  candidates: z.array(prechunkedCandidateSchema),
+  reasons: z.array(z.string()).optional(),
 });
 
 export const filesystemBrowseOutputSchema = z.object({

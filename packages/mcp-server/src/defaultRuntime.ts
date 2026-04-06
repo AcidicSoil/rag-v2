@@ -10,12 +10,16 @@ import {
   readTextFileRange,
   resolveUserPath,
 } from "./pathResolution";
+import { createFilesystemLargeCorpusAnalysisStore } from "./largeCorpusAnalysisStore";
+import { createFilesystemHierarchicalIndexStore } from "./hierarchicalIndexStore";
 
 function estimateTokens(value: string) {
   return Math.ceil(value.trim().length / 4);
 }
 
 export function createDefaultMcpRuntime(): RagMcpRuntime {
+  const largeCorpusAnalysisStore = createFilesystemLargeCorpusAnalysisStore();
+  const hierarchicalIndexStore = createFilesystemHierarchicalIndexStore();
   return {
     loader: {
       async load(input) {
@@ -85,6 +89,8 @@ export function createDefaultMcpRuntime(): RagMcpRuntime {
         };
       },
     },
+    largeCorpusAnalysisStore,
+    hierarchicalIndexStore,
     inspector: {
       async inspect({ corpus }) {
         return {
@@ -101,6 +107,13 @@ export function createDefaultMcpRuntime(): RagMcpRuntime {
           fullContextViable: (corpus.estimatedTokens ?? 0) < 4000,
           retrievalRecommended:
             (corpus.chunkCount ?? 0) > 0 || (corpus.estimatedTokens ?? 0) >= 4000,
+          questionScope: corpus.analysis?.questionScope,
+          targetType: corpus.analysis?.targetType,
+          modality: corpus.analysis?.modality,
+          analysisNotes: corpus.analysis?.notes,
+          directoryManifests: corpus.analysis?.directoryManifests,
+          largeFileSynopses: corpus.analysis?.largeFileSynopses,
+          oversizedPaths: corpus.analysis?.oversizedPaths,
         };
       },
     },
