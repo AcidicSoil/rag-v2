@@ -787,6 +787,7 @@ function selectSummaryDocumentsForQuery(
   }
 
   const normalizedQuery = query.toLowerCase();
+  const queryHints = extractStructuredOverviewQueryHints(query);
   const topicIntent = /\b(theme|themes|topic|topics|pattern|patterns|subject|subjects|dominant)\b/i.test(query);
   const timeIntent = /\b(time|timeline|timing|when|date|dates|day|days|month|months|year|years|recent|earliest|latest|period)\b/i.test(query);
   const entityIntent = /\b(who|user|users|role|roles|conversation|conversations|session|sessions|message|messages|participant|participants|entity|entities|id|ids)\b/i.test(query);
@@ -807,17 +808,17 @@ function selectSummaryDocumentsForQuery(
 
   const prioritizedSourceTypes = [
     inventoryIntent ? "structured-file-summary" : undefined,
-    topicIntent || inventoryIntent ? "structured-topic-summary" : undefined,
-    timeIntent || inventoryIntent ? "structured-time-summary" : undefined,
-    entityIntent || inventoryIntent ? "structured-entity-summary" : undefined,
+    topicIntent || inventoryIntent || queryHints.topicTerms.length > 0 ? "structured-topic-summary" : undefined,
+    timeIntent || inventoryIntent || queryHints.timeTerms.length > 0 ? "structured-time-summary" : undefined,
+    entityIntent || inventoryIntent || queryHints.entityTerms.length > 0 ? "structured-entity-summary" : undefined,
     "file-synopsis",
     "directory-manifest",
   ].filter((value): value is string => Boolean(value));
 
   for (const sourceType of prioritizedSourceTypes) {
     const ranked = bySourceType(sourceType).sort((left, right) => {
-      const leftScore = computeSummaryDocumentPreferenceScore(left, normalizedQuery);
-      const rightScore = computeSummaryDocumentPreferenceScore(right, normalizedQuery);
+      const leftScore = computeSummaryDocumentPreferenceScore(left, normalizedQuery, queryHints);
+      const rightScore = computeSummaryDocumentPreferenceScore(right, normalizedQuery, queryHints);
       return rightScore - leftScore;
     });
     for (const document of ranked) {
@@ -856,7 +857,12 @@ function selectSummaryDocumentsForQuery(
 
 function computeSummaryDocumentPreferenceScore(
   document: RagLoadedCorpus["documents"][number],
-  normalizedQuery: string
+  normalizedQuery: string,
+  queryHints: {
+    topicTerms: Array<string>;
+    timeTerms: Array<string>;
+    entityTerms: Array<string>;
+  }
 ): number {
   const sourceType = typeof document.metadata?.sourceType === "string"
     ? document.metadata.sourceType
@@ -880,6 +886,28 @@ function computeSummaryDocumentPreferenceScore(
     score += 1;
   }
 
+  if (sourceType === "structured-topic-summary") {
+    for (const term of queryHints.topicTerms) {
+      if (content.includes(term)) {
+        score += 2.5;
+      }
+    }
+  }
+  if (sourceType === "structured-time-summary") {
+    for (const term of queryHints.timeTerms) {
+      if (content.includes(term)) {
+        score += 2.5;
+      }
+    }
+  }
+  if (sourceType === "structured-entity-summary") {
+    for (const term of queryHints.entityTerms) {
+      if (content.includes(term)) {
+        score += 2.5;
+      }
+    }
+  }
+
   for (const token of normalizedQuery.split(/[^a-z0-9]+/).filter((token) => token.length > 2)) {
     if (content.includes(token)) {
       score += 0.5;
@@ -887,6 +915,76 @@ function computeSummaryDocumentPreferenceScore(
   }
 
   return score;
+}
+
+function extractStructuredOverviewQueryHints(query: string): {
+  topicTerms: Array<string>;
+  timeTerms: Array<string>;
+  entityTerms: Array<string>;
+} {
+  const normalized = query.toLowerCase();
+  const topicTerms = new Set<string>();
+  const timeTerms = new Set<string>();
+  const entityTerms = new Set<string>();
+
+  for (const match of normalized.matchAll(/\b(?:topic|topics|theme|themes|subject|subjects)\s+(?:in|for|about)?\s*([a-z0-9_-]{3,})/g)) {
+    topicTerms.add(match[1]!);
+  }
+  for (const match of normalized.matchAll(/\b([a-z][a-z0-9_-]{2,})\s+(?:threads|thread|conversations|conversation|messages|message)\b/g)) {
+    topicTerms.add(match[1]!);
+  }
+  for (const match of normalized.matchAll(/\b(?:user|users|role|roles|conversation|conversations|session|sessions|message|messages|participant|participants|entity|entities|id|ids)\s+(?:in|for|about)?\s*([a-z0-9_.:@/-]{3,})/g)) {
+    entityTerms.add(match[1]!);
+  }
+  for (const match of normalized.matchAll(/\b([a-z]{3,9})\b/g)) {
+    const monthTerm = mapMonthNameToTimeHint(match[1]!);
+    if (monthTerm) {
+      timeTerms.add(monthTerm);
+    }
+  }
+  for (const match of normalized.matchAll(/\b(\d{4}-\d{2}-\d{2}|\d{4}-\d{2})\b/g)) {
+    timeTerms.add(match[1]!);
+  }
+  if (/\brecent\b/.test(normalized)) {
+    entityTerms.add("user");
+    timeTerms.add("2025-");
+  }
+
+  return {
+    topicTerms: [...topicTerms],
+    timeTerms: [...timeTerms],
+    entityTerms: [...entityTerms],
+  };
+}
+
+function mapMonthNameToTimeHint(value: string): string | undefined {
+  const monthMap: Record<string, string> = {
+    january: "-01",
+    february: "-02",
+    march: "-03",
+    april: "-04",
+    may: "-05",
+    june: "-06",
+    july: "-07",
+    august: "-08",
+    september: "-09",
+    october: "-10",
+    november: "-11",
+    december: "-12",
+    jan: "-01",
+    feb: "-02",
+    mar: "-03",
+    apr: "-04",
+    jun: "-06",
+    jul: "-07",
+    aug: "-08",
+    sep: "-09",
+    sept: "-09",
+    oct: "-10",
+    nov: "-11",
+    dec: "-12",
+  };
+  return monthMap[value];
 }
 
 function buildFullContextPrompt(

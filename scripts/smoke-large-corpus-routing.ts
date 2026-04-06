@@ -154,6 +154,40 @@ async function main() {
       "Expected global-summary search-results to emit evidence blocks from selected summary documents."
     );
 
+    const attachedTimeSearchResult = await orchestrateRagRequest(
+      {
+        query: "What topics dominate in February across this attached dataset?",
+        documents: [
+          {
+            id: "attached-1",
+            name: "dataset-export-1.jsonl",
+            content: Array.from({ length: 9000 }, (_, index) =>
+              JSON.stringify({
+                conversation_id: `conv-${index + 1}`,
+                user_id: index % 3 === 0 ? "user-a" : "user-b",
+                timestamp: `2025-02-${String((index % 5) + 1).padStart(2, "0")}T12:00:00Z`,
+                topic: index % 2 === 0 ? "billing" : "support",
+                content: "Attached export record with repeated structured chat content.",
+              })
+            ).join("\n"),
+            metadata: {
+              path: "dataset-export-1.jsonl",
+            },
+          },
+        ],
+        outputMode: "search-results",
+      },
+      runtime
+    );
+
+    assert(
+      attachedTimeSearchResult.candidates.some((candidate) =>
+        candidate.sourceName.includes("structured-time-summary:") &&
+        candidate.content.includes("2025-02")
+      ),
+      "Expected month-name overview queries to surface matching structured time summaries."
+    );
+
     const jsonlPath = path.join(tempRoot, "dataclaw_export.jsonl");
     const repeatedLine = JSON.stringify({
       conversation_id: "conv-1",
