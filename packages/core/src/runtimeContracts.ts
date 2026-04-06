@@ -218,6 +218,18 @@ export interface RagDirectoryManifest {
   truncated: boolean;
 }
 
+export interface RagHierarchicalDocumentNode {
+  documentId: string;
+  documentName: string;
+  summary: string;
+  summaryDocument: RagDocument;
+  chunks: Array<RagCandidate>;
+}
+
+export interface RagHierarchicalIndex {
+  nodes: Array<RagHierarchicalDocumentNode>;
+}
+
 export interface RagCorpusAnalysis {
   questionScope: "local" | "global";
   targetType: "file" | "directory" | "mixed";
@@ -228,6 +240,7 @@ export interface RagCorpusAnalysis {
   directoryManifests: Array<RagDirectoryManifest>;
   largeFileSynopses: Array<RagFileSynopsis>;
   oversizedPaths: Array<string>;
+  hierarchicalIndex?: RagHierarchicalIndex;
 }
 
 export interface RagLoadedCorpus {

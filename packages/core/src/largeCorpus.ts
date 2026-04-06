@@ -1,4 +1,5 @@
 import type { RagDocument } from "./contracts";
+import { buildHierarchicalDocumentIndex } from "./localRetrieval";
 import type { RagExecutionRoute } from "./outputContracts";
 import type {
   FileExtensionCount,
@@ -102,6 +103,14 @@ export async function analyzeLargeCorpus(
           : "mixed";
 
   const summaryDocuments = buildSummaryDocuments(manifests, synopses);
+  const hierarchicalIndex = shouldBuildHierarchicalIndex({
+    questionScope,
+    oversizedPaths,
+    modality,
+    targetType,
+  })
+    ? buildHierarchicalDocumentIndex(selectHierarchicalDocuments(corpus.documents, synopses, oversizedPaths))
+    : undefined;
   const recommendedRoute = recommendLargeCorpusRoute({
     questionScope,
     targetType,
@@ -113,6 +122,9 @@ export async function analyzeLargeCorpus(
   notes.push(
     `Large-corpus analysis classified scope=${questionScope}, target=${targetType}, modality=${modality}, oversizedFiles=${oversizedPaths.length}.`
   );
+  if (hierarchicalIndex) {
+    notes.push(`Built hierarchical index with ${hierarchicalIndex.nodes.length} parent nodes.`);
+  }
 
   return {
     questionScope,
@@ -124,6 +136,7 @@ export async function analyzeLargeCorpus(
     directoryManifests: manifests,
     largeFileSynopses: synopses,
     oversizedPaths: [...new Set(oversizedPaths)],
+    hierarchicalIndex,
   };
 }
 
@@ -334,6 +347,52 @@ function buildSummaryDocuments(
   }
 
   return documents;
+}
+
+function shouldBuildHierarchicalIndex(input: {
+  questionScope: "local" | "global";
+  oversizedPaths: Array<string>;
+  modality: RagCorpusAnalysis["modality"];
+  targetType: RagCorpusAnalysis["targetType"];
+}): boolean {
+  if (input.questionScope !== "local") {
+    return false;
+  }
+  if (input.oversizedPaths.length > 0) {
+    return true;
+  }
+  return input.targetType !== "directory" && input.modality === "text-heavy";
+}
+
+function selectHierarchicalDocuments(
+  documents: Array<RagDocument>,
+  synopses: Array<RagFileSynopsis>,
+  oversizedPaths: Array<string>
+): Array<RagDocument> {
+  const oversizedSet = new Set(oversizedPaths.map((value) => value.toLowerCase()));
+  const synopsisPaths = new Set(synopses.map((synopsis) => synopsis.path.toLowerCase()));
+
+  const selected = documents.filter((document) => {
+    const candidatePaths = [
+      document.id,
+      document.name,
+      typeof document.metadata?.discoveredPath === "string"
+        ? document.metadata.discoveredPath
+        : undefined,
+      typeof document.metadata?.absolutePath === "string"
+        ? document.metadata.absolutePath
+        : undefined,
+      typeof document.metadata?.path === "string" ? document.metadata.path : undefined,
+    ]
+      .filter((value): value is string => Boolean(value))
+      .map((value) => value.toLowerCase());
+
+    return candidatePaths.some(
+      (value) => oversizedSet.has(value) || synopsisPaths.has(value)
+    );
+  });
+
+  return selected.length > 0 ? selected : documents;
 }
 
 function recommendLargeCorpusRoute(input: {

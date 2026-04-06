@@ -73,6 +73,10 @@ async function main() {
       localResult.diagnostics.notes?.some((note) => note.includes("scope=local")),
       "Expected diagnostics to record large-corpus local classification."
     );
+    assert(
+      localResult.diagnostics.notes?.some((note) => note.includes("Built hierarchical index")),
+      "Expected diagnostics to report hierarchical index construction."
+    );
     assert(localResult.candidates.length > 0, "Expected hierarchical retrieval to produce candidates.");
     assert(
       localResult.candidates.some((candidate) =>

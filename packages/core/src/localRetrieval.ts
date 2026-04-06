@@ -1,4 +1,5 @@
 import type { RagCandidate, RagDocument } from "./contracts";
+import type { RagHierarchicalIndex } from "./runtimeContracts";
 
 const STOP_WORDS = new Set([
   "a",
@@ -80,24 +81,25 @@ export function hierarchicalRetrieveFromDocuments(
   options?: {
     maxParentDocuments?: number;
     maxChildChunksPerDocument?: number;
+    hierarchicalIndex?: RagHierarchicalIndex;
   }
 ): Array<RagCandidate> {
   const normalizedQuery = normalizeWhitespace(query);
   const queryTokens = tokenize(normalizedQuery);
   const quotedSpans = extractQuotedSpans(query);
-  const parentRankings = documents
-    .map((document) => {
-      const summary = summarizeDocument(document);
+  const hierarchicalIndex =
+    options?.hierarchicalIndex ?? buildHierarchicalDocumentIndex(documents);
+  const parentRankings = hierarchicalIndex.nodes
+    .map((node) => {
       const score = scoreChunk(normalizedQuery, queryTokens, quotedSpans, {
-        sourceId: document.id,
-        sourceName: document.name,
-        heading: document.name,
-        content: summary,
-        metadata: document.metadata,
+        sourceId: node.documentId,
+        sourceName: node.documentName,
+        heading: node.documentName,
+        content: node.summary,
+        metadata: node.summaryDocument.metadata,
       });
       return {
-        document,
-        summary,
+        node,
         score,
       };
     })
@@ -107,23 +109,30 @@ export function hierarchicalRetrieveFromDocuments(
 
   const childCandidates: Array<RagCandidate> = [];
   for (const parent of parentRankings) {
-    const rankedChunks = chunkDocument(parent.document)
+    const rankedChunks = parent.node.chunks
       .map((chunk) => ({
         chunk,
-        score: scoreChunk(normalizedQuery, queryTokens, quotedSpans, chunk),
+        score: scoreChunk(normalizedQuery, queryTokens, quotedSpans, {
+          sourceId: chunk.sourceId,
+          sourceName: chunk.sourceName,
+          heading:
+            typeof chunk.metadata?.heading === "string"
+              ? chunk.metadata.heading
+              : chunk.sourceName,
+          content: chunk.content,
+          metadata: chunk.metadata,
+        }),
       }))
       .filter((entry) => entry.score > 0)
       .sort((left, right) => right.score - left.score)
       .slice(0, options?.maxChildChunksPerDocument ?? Math.max(3, maxCandidates))
       .map(({ chunk, score }) => ({
-        sourceId: chunk.sourceId,
-        sourceName: chunk.sourceName,
-        content: chunk.content,
+        ...chunk,
         score: Math.min(1, score * 0.8 + parent.score * 0.2),
         metadata: {
           ...chunk.metadata,
           retrievalMode: "hierarchical-retrieval",
-          parentSummary: parent.summary,
+          parentSummary: parent.node.summary,
           parentScore: parent.score,
         },
       } satisfies RagCandidate));
@@ -134,6 +143,43 @@ export function hierarchicalRetrieveFromDocuments(
   return childCandidates
     .sort((left, right) => right.score - left.score)
     .slice(0, maxCandidates);
+}
+
+export function buildHierarchicalDocumentIndex(
+  documents: Array<RagDocument>
+): RagHierarchicalIndex {
+  return {
+    nodes: documents.map((document) => {
+      const summary = summarizeDocument(document);
+      const chunks = chunkDocument(document).map((chunk) => ({
+        sourceId: chunk.sourceId,
+        sourceName: chunk.sourceName,
+        content: chunk.content,
+        score: 0,
+        metadata: {
+          ...chunk.metadata,
+          heading: chunk.heading,
+        },
+      } satisfies RagCandidate));
+
+      return {
+        documentId: document.id,
+        documentName: document.name,
+        summary,
+        summaryDocument: {
+          id: `hierarchy-summary:${document.id}`,
+          name: `hierarchy-summary:${document.name}`,
+          content: summary,
+          metadata: {
+            ...document.metadata,
+            sourceType: "hierarchical-summary",
+            sourceDocumentId: document.id,
+          },
+        },
+        chunks,
+      };
+    }),
+  };
 }
 
 function scoreChunk(

@@ -510,6 +510,7 @@ async function retrieveCandidates(
         {
           maxParentDocuments: Math.max(2, Math.min(4, options.retrieval?.maxEvidenceBlocks ?? DEFAULT_MAX_EVIDENCE_BLOCKS)),
           maxChildChunksPerDocument: Math.max(3, options.retrieval?.maxEvidenceBlocks ?? DEFAULT_MAX_EVIDENCE_BLOCKS),
+          hierarchicalIndex: corpus.analysis?.hierarchicalIndex,
         }
       );
     }
@@ -518,6 +519,7 @@ async function retrieveCandidates(
       hierarchicalRetrieveFromDocuments(rewrite.text, corpus.documents, maxCandidates, {
         maxParentDocuments: Math.max(2, Math.min(4, options.retrieval?.maxEvidenceBlocks ?? DEFAULT_MAX_EVIDENCE_BLOCKS)),
         maxChildChunksPerDocument: Math.max(3, options.retrieval?.maxEvidenceBlocks ?? DEFAULT_MAX_EVIDENCE_BLOCKS),
+        hierarchicalIndex: corpus.analysis?.hierarchicalIndex,
       })
     );
 
