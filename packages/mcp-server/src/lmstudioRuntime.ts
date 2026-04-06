@@ -132,7 +132,7 @@ export async function createLmStudioMcpRuntime(): Promise<RagMcpRuntime> {
       async rerank({ query, candidates, options }) {
         const topK = options?.rerank?.topK ?? 5;
         try {
-          const llmModel = (await client.llm.model()) as LLMDynamicHandle;
+          const rerankResolution = await resolveRerankModel(client, options);
           const heuristicEntries: Array<RankedRetrievalEntry> = toRetrievalResultEntries(candidates)
             .slice(0, topK)
             .map((entry) => ({
@@ -148,7 +148,7 @@ export async function createLmStudioMcpRuntime(): Promise<RagMcpRuntime> {
               },
             }));
           const result = await performModelAssistedRerank(
-            llmModel,
+            rerankResolution.model,
             query,
             heuristicEntries,
             topK,
@@ -163,7 +163,7 @@ export async function createLmStudioMcpRuntime(): Promise<RagMcpRuntime> {
               }))
             ),
             notes: [
-              `Model-assisted rerank parsed ${result.parsedScores.length} scores from LM Studio response.`,
+              `Model-assisted rerank used ${rerankResolution.modelId ?? "active chat model"} (${rerankResolution.source}) and parsed ${result.parsedScores.length} scores from LM Studio response.`,
             ],
           };
         } catch (error) {
@@ -302,6 +302,75 @@ async function resolveEmbeddingModel(client: LMStudioClient): Promise<any> {
   }
 
   return client.embedding.model(found.modelKey);
+}
+
+async function resolveRerankModel(
+  client: LMStudioClient,
+  options?: { rerank?: { modelSource?: string; modelId?: string } }
+): Promise<{
+  model: LLMDynamicHandle;
+  modelId?: string;
+  source: "active-chat-model" | "configured" | "auto-detected";
+}> {
+  const modelSource = options?.rerank?.modelSource ?? "active-chat-model";
+  const modelId = options?.rerank?.modelId?.trim();
+
+  if (modelSource === "manual-model-id") {
+    if (!modelId) {
+      throw new Error(
+        "Model-assisted rerank is set to manual model mode but no rerank model ID was provided."
+      );
+    }
+
+    return {
+      model: (await client.llm.model(modelId)) as LLMDynamicHandle,
+      modelId,
+      source: "configured",
+    };
+  }
+
+  if (modelSource === "auto-detect") {
+    const loadedModels =
+      typeof client.llm.listLoaded === "function"
+        ? await client.llm.listLoaded()
+        : [];
+    if (loadedModels.length > 0) {
+      return {
+        model: loadedModels[0] as LLMDynamicHandle,
+        modelId: (loadedModels[0] as any)?.identifier,
+        source: "auto-detected",
+      };
+    }
+
+    const downloadedModels = await client.system.listDownloadedModels("llm");
+    const found =
+      downloadedModels.find((model) => {
+        const candidate = `${model.modelKey} ${model.path} ${model.displayName}`.toLowerCase();
+        return (
+          candidate.includes("instruct") ||
+          candidate.includes("chat") ||
+          candidate.includes("assistant")
+        );
+      }) ?? downloadedModels[0];
+
+    if (!found) {
+      throw new Error(
+        "No LLM model found for model-assisted reranking. Please download one in LM Studio."
+      );
+    }
+
+    return {
+      model: (await client.llm.model(found.modelKey)) as LLMDynamicHandle,
+      modelId: found.modelKey,
+      source: "auto-detected",
+    };
+  }
+
+  return {
+    model: (await client.llm.model()) as LLMDynamicHandle,
+    modelId: undefined,
+    source: "active-chat-model",
+  };
 }
 
 function extractFileHandles(corpus: RagLoadedCorpus): Array<FileHandle> {

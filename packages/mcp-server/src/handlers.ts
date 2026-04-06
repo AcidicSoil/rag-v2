@@ -167,6 +167,8 @@ function mergeLegacyOverrides(input: {
     hybridEnabled?: boolean;
     rerankEnabled?: boolean;
     rerankTopK?: number;
+    rerankModelSource?: "active-chat-model" | "auto-detect" | "manual-model-id";
+    rerankModelId?: string;
     maxEvidenceBlocks?: number;
   };
   options?: RagRequestOptions;
@@ -212,6 +214,9 @@ function mergeLegacyOverrides(input: {
         input.options?.rerank?.enabled ?? input.retrieval?.rerankEnabled,
       strategy: input.options?.rerank?.strategy,
       topK: input.options?.rerank?.topK ?? input.retrieval?.rerankTopK,
+      modelSource:
+        input.options?.rerank?.modelSource ?? input.retrieval?.rerankModelSource,
+      modelId: input.options?.rerank?.modelId ?? input.retrieval?.rerankModelId,
     },
     safety: input.options?.safety,
     outputMode: input.options?.outputMode,

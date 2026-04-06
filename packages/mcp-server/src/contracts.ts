@@ -69,6 +69,8 @@ export const rerankOptionsSchema = z
     enabled: z.boolean().optional(),
     strategy: z.enum(["heuristic-v1", "heuristic-then-llm"]).optional(),
     topK: z.number().int().min(1).max(20).optional(),
+    modelSource: z.enum(["active-chat-model", "auto-detect", "manual-model-id"]).optional(),
+    modelId: z.string().min(1).optional(),
   })
   .optional();
 
@@ -98,6 +100,8 @@ export const retrievalOverridesSchema = z
     hybridEnabled: z.boolean().optional(),
     rerankEnabled: z.boolean().optional(),
     rerankTopK: z.number().int().min(1).max(20).optional(),
+    rerankModelSource: z.enum(["active-chat-model", "auto-detect", "manual-model-id"]).optional(),
+    rerankModelId: z.string().min(1).optional(),
     maxEvidenceBlocks: z.number().int().min(1).max(20).optional(),
   })
   .optional();

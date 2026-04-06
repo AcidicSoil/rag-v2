@@ -46,10 +46,17 @@ export interface RagRetrievalOptions {
   dedupeSimilarityThreshold?: number;
 }
 
+export type RagRerankModelSource =
+  | "active-chat-model"
+  | "auto-detect"
+  | "manual-model-id";
+
 export interface RagRerankOptions {
   enabled?: boolean;
   strategy?: RagRerankStrategy;
   topK?: number;
+  modelSource?: RagRerankModelSource;
+  modelId?: string;
 }
 
 export interface RagSafetyOptions {

@@ -49,6 +49,30 @@ async function main() {
   assert(answer.answer.includes("Stub"), "Expected rag_answer to use the current stub answer composer.");
   assert(answer.evidence.length > 0, "Expected rag_answer to emit evidence blocks.");
 
+  const prepared = await handlers.ragPreparePrompt({
+    query: "What database does the session service use?",
+    documents: [
+      {
+        id: "architecture.md",
+        name: "architecture.md",
+        content:
+          "The session service uses PostgreSQL for durable state. Analytics uses ClickHouse for dashboards.",
+      },
+    ],
+    options: {
+      rerank: {
+        enabled: true,
+        strategy: "heuristic-then-llm",
+        modelSource: "manual-model-id",
+        modelId: "test-rerank-model",
+      },
+    },
+  });
+  assert(
+    prepared.preparedPrompt.length > 0,
+    "Expected rag_prepare_prompt to accept rerank model source options."
+  );
+
   const rerank = await handlers.rerankOnly({
     query: "session service",
     candidates: [
